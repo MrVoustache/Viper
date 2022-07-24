@@ -1,7 +1,12 @@
-from threading import Event, Thread, get_ident
-from typing import Any, Callable, Iterable, Mapping, Optional
+"""
+This module adds new classes of threads, including one for deamonic threads, but also fallen threads.
+"""
 
-SHUTDOWN_TIMEOUT = 1000000000
+
+import atexit
+from threading import Event, RLock, Thread
+from typing import Any, Callable, Iterable, Mapping, Set
+
 
 
 class DaemonThread(Thread):
@@ -10,8 +15,8 @@ class DaemonThread(Thread):
     Just a separate class for deamonic threads.
     """
 
-    def __init__(self, group: None = None, target: Optional[Callable[..., Any]] = None, name: Optional[str] = None, args: Iterable[Any] = (), kwargs: Optional[Mapping[str, Any]] = {}) -> None:
-        super().__init__(group=group, target=target, name=name, args=args, kwargs=kwargs, daemon=True)
+    def __init__(self, group: None = None, target: Callable[..., Any] | None = None, name: str | None = None, args: Iterable[Any] = (), kwargs: Mapping[str, Any] | None = None) -> None:
+        super().__init__(group, target, name, args, kwargs, daemon=True)
 
     def start(self) -> None:
         self.daemon = True
@@ -24,102 +29,145 @@ class DaemonThread(Thread):
 
     @daemon.setter
     def daemon(self, daemonic):
+        if daemonic != True:
+            raise ValueError("This is a thread of type DeamonThread. You cannot make it not deamonic.")
         if not self._initialized:
             raise RuntimeError("Thread.__init__() not called")
         if self._started.is_set():
             raise RuntimeError("cannot set daemon status of active thread")
+        
         self._daemonic = True
 
 
-_alerted = {}
 
-class GuardianThread(Thread):
+
+
+class FallenThread(DaemonThread):
 
     """
-    Close to deamonic threads, but before when only DeamonThreads and GuardianThreads remain, GuardianThreads will first receive a shutdown signal
-    (Through the function better_threading.guardian_exit()) and their callback function will be called.
-    After receiving the signal and/or the execution of their callback function, they must exit by themselves.
-    Once all GuardianThreads have ended, deamon threads are terminated.
+    This subclass of deamonic threads will be alerted upon interpreter shutdown and will be given time to finish their tasks if necessary.
+    This is done through the finalization_callback function.
+    The FallenThread will be judged disposable when its finalization completes.
     """
 
-    def __init__(self, group: None = None, target: Optional[Callable[..., Any]] = None, callback : Optional[Callable[[], Any]] = None, name: Optional[str] = None, args: Iterable[Any] = (), kwargs: Optional[Mapping[str, Any]] = {}) -> None:
-        if callback != None and not callable(callback):
-            raise TypeError("Expected callable for callback, got " + repr(callback.__class__.__name__))
-        super().__init__(group = group, target = target, name = name, args = args, kwargs = kwargs, daemon = True)
-        self._callback = callback
+    _activation_lock = RLock()
+    _new_fallen = Event()
 
-    
-    def start(self) -> None:
-        super().start()
-        _alerted[self.ident] = [False, self]
+    def __init__(self, finalizing_callback : Callable[..., Any], group: None = None, target: Callable[..., Any] | None = None, name: str | None = None, args: Iterable[Any] = (), kwargs: Mapping[str, Any] | None = None) -> None:
+        with FallenThread._activation_lock:
+            super().__init__(group, target, name, args, kwargs)
 
+            from threading import Event
 
-_stopping = Event()
-
-
-def guardian_exit() -> bool:
-    from threading import current_thread
-    if not isinstance(current_thread(), GuardianThread):
-        raise RuntimeError("Non-GuardianThreads cannot know when the Guardians should exit.")
-    res = _stopping.is_set()
-    if res:
-        _alerted[current_thread().ident][0] = True
-    return res
+            if not callable(finalizing_callback):
+                raise TypeError("Expected callable for finalizing_callback, got " + repr(finalizing_callback.__class__.__name__))
+            
+            self._finalizing_callback = finalizing_callback
+            self._finalizing_event = Event()        # To tell when finalization has started
+            FallenThread._new_fallen.set()          # To tell that a new FallenThread has been created
 
 
-def GuardianOfGuardian():
-    from time import sleep, time_ns
-    from threading import enumerate, current_thread, main_thread
-    thread_list = []
-    running = True
-    main = main_thread()
 
-    while running:
-        sleep(0.1)
-        new = enumerate()
-        if new != thread_list or not main.is_alive():
-            thread_list = new
-            running = False
-            for ti in thread_list:
-                if not isinstance(ti, (GuardianThread, DaemonThread)) and not ti.daemon and ti.is_alive() and ti != current_thread():
-                    running = True
-
-    _stopping.set()
-
-    def _messenger(target, ident):
-        target()
-        _alerted[ident][0] = True
-
-    for ti in enumerate():
-        if isinstance(ti, GuardianThread) and ti.is_alive() and ti._callback:
-            tii = DaemonThread(target = _messenger, args = (ti._callback, ti.ident))
-            tii.start()
-
-    while not _alerted:
-        sleep(0.0001)
-    
-    t = time_ns()
-
-    while True:
-        elapsed = time_ns() - t
-
-        only_zombies = True
-        for status, master in _alerted.values():
-            if status and master.is_alive():
-                only_zombies = False
-        
-        if only_zombies and elapsed >= SHUTDOWN_TIMEOUT:
-            return
-
-        sleep(0.001)
-    
     
 
 
+@atexit.register
+def save_fallen_threads():
+    """
+    This function is responsible for calling the finalization process. It will:
+        - Start a new DeamonThread for each finalization callback
+        - Wait for the completion of all finalizations
+        - Wait until both tasks are finished
+    """
 
-GuardianMainThread = Thread(target = GuardianOfGuardian, name = "Guardian of Guardians")
-GuardianMainThread.start()
+    from threading import enumerate, RLock, Event
 
-del GuardianMainThread, GuardianOfGuardian, Event, Thread, get_ident, Any, Callable, Iterable, Mapping, Optional
+    def _finalize(t : FallenThread):
+        """
+        Just a little handler for notifying ans starting the finalizer
+        """
+        t._finalizing_event.set()
+        try:
+            t._finalizing_callback()
+        except:
+            print("Exception in FallenThread {}'s finalizer :".format(t.name))
+            raise
 
-__all__ = ["DaemonThread", "GuardianThread", "guardian_exit"]
+    alive_finalizers : Set[DaemonThread] = set()    # Running finalizer DeamonThreads
+    finalization_lock = RLock()                     # Ensure proper transmission of work between the two tasks
+    new_finalizing = Event()                        # A new FallenThread has started finalizing
+    finished = [False, False]                       # Indicates if both tasks have finished
+    checker_lock = RLock()                          # Ensures the correctness when checking for the completion of tasks
+    checker_event = Event()                         # Notifies for a checking round
+
+    def _start_finalizers():
+        """
+        This function will stay alive until the end and wait start the finalizers of all FallenThreads
+        """
+        while True:
+            if not FallenThread._new_fallen.is_set():   # No new fallen -> no work
+                with checker_lock:
+                    finished[0] = True
+                    checker_event.set()
+            FallenThread._new_fallen.wait()     # New fallen!
+            with checker_lock:
+                finished[0] = False
+
+            with FallenThread._activation_lock:     # Handling them
+                FallenThread._new_fallen.clear()
+                alive_threads = {t for t in enumerate() if isinstance(t, FallenThread) and t.is_alive()}
+                for t in alive_threads:
+
+                    if not t._finalizing_event.is_set():    # I should start its finalizer
+                        d = DaemonThread(target = _finalize, args = (t, ))
+                        d.start()
+                        t._finalizing_event.wait()
+                        alive_finalizers.add(d)
+                        with checker_lock:
+                            finished[1] = False     # The other task has some work to do now
+                        with finalization_lock:
+                            new_finalizing.set()    # Notifying the other task
+
+    def _await_finalizers():
+        """
+        This function will wait for the completion of all finalizers.
+        """
+        while True:
+            if not new_finalizing.is_set():     # No new running finalizer -> no work
+                with checker_lock:
+                    finished[1] = True
+                    checker_event.set()
+            new_finalizing.wait()       # New finalizer running!
+            with finalization_lock:
+                new_finalizing.clear()
+            with checker_lock:
+                finished[1] = False
+
+            dead_finalizers : Set[DaemonThread] = set()
+            for d in alive_finalizers.copy():   # Joining all running finalizers
+                d.join()
+                dead_finalizers.add(d)
+            alive_finalizers.difference_update(dead_finalizers)     # Clearing them from the running finalizers
+
+    def _check():
+        """
+        This function will wait until the two previous tasks complete.
+        """
+        while True:
+            checker_event.wait()    # I received a checking notification!
+            with checker_lock:
+                if all(finished):   # Both tasks finished -> it is really over now
+                    break
+                checker_event.clear()
+
+    DaemonThread(target = _start_finalizers).start()
+    DaemonThread(target = _await_finalizers).start()
+    d = DaemonThread(target = _check)   # Checker thread to join
+    d.start()
+    d.join()
+    
+
+del save_fallen_threads, Any, Callable, Iterable, Mapping, Set, Event, RLock, Thread, atexit
+
+
+__all__ = ["DaemonThread", "FallenThread"]
