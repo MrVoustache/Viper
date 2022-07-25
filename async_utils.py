@@ -1,3 +1,9 @@
+"""
+This module add asyncio tools to better avoid problems with some implementations.
+For example, an instance of IndependantLoop can be used to await a couroutine that will run in another self-handled loop.
+"""
+
+
 import asyncio
 from typing import Any, Awaitable, Optional
 
@@ -5,6 +11,15 @@ from typing import Any, Awaitable, Optional
 
 
 class IndependantLoop:
+
+    """
+    An event loop that will be run in a separate thread.
+    Coroutine can be sent to this loop and yet be awaited in another loop.
+    """
+
+    __slots__ = {
+        "loop" : "The event loop to run in background"
+    }
 
 
     def __init__(self, loop : Optional[asyncio.AbstractEventLoop] = None) -> None:
@@ -15,6 +30,10 @@ class IndependantLoop:
             pass
 
     async def run(self, coro : Awaitable, *, timeout : float = float("inf"), default : Any = None):
+        """
+        Runs coroutine coro in the background event loop and awaits it in the current loop.
+        If given, waits at most timeout and returns default if timeout runs out before coroutine finishes.
+        """
         if not isinstance(timeout, float):
             raise TypeError("Expected float for timeout, got " + repr(timeout.__class__.__name__))
         if timeout < 0:
