@@ -1,0 +1,186 @@
+from numbers import Complex
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+
+
+
+class ExecutionInfo:
+
+    """
+    A class that holds the information about a specific run of a function.
+    """
+
+    __slots__ = {
+        "function" : "The function that was executed",
+        "duration" : "The duration of the execution",
+        "thread" : "The thread identifier of the thread that executed the function",
+        "level" : "The call level that the function was called at"
+    }
+
+    def __init__(self) -> None:
+        self.function = None
+        self.duration = 0
+        self.thread = 0
+        self.level = 0
+
+    
+    def __str__(self) -> str:
+        return "[Function {} lasted {} units in thread #{} at level {}]".format(self.function.__name__, self.duration, self.thread, self.level)
+
+
+
+
+class Chrono:
+
+    """
+    A chronometer class. Allows to measure execution time of multiple functions in a program (even at multiple levels).
+    Can be used as a function decorator.
+
+    A Chrono instance can take a custom clock function as argument. This should be a function with no arguments and should return an integer.
+    """
+
+    def __init__(self, clock : Optional[Callable[[], Any]] = None) -> None:
+        if clock == None:
+            from time import process_time_ns
+            clock = process_time_ns
+        if not callable(clock):
+            raise TypeError("Expected callable, got " + repr(clock.__class__.__name__))
+        try:
+            i = clock()
+        except:
+            raise ValueError("Clock function did not work")
+        
+        self.clock = clock
+        self.__level : Dict[int, int] = {}
+        self.__entries : List[Tuple[int, Callable, int, int, bool]] = []         # self.__entries[i] = (time, func, level, TID, in_or_out)
+
+    
+    def call(self, func : Callable, *args : Any, **kwargs : Any) -> Any:
+        """
+        Calls function with given arguments and measures its execution time.
+        """
+        from threading import get_ident
+        TID = get_ident()
+        if TID not in self.__level:
+            self.__level[TID] = 0
+
+        level = self.__level[TID]
+        self.__level[TID] += 1
+        self.__entries.append((self.clock(), func, level, TID, True))
+
+        try:
+            res = func(*args, **kwargs)
+        except:
+            self.__level[TID] -= 1
+            self.__entries.append((self.clock(), func, level, TID, False))
+            raise
+            
+        self.__level[TID] -= 1
+        self.__entries.append((self.clock(), func, level, TID, False))
+
+        return res
+    
+
+    def __call__(self, func : Callable) -> Any:
+        """
+        Implements the decorator of a function.
+        """
+        def chrono_wrapper(*args, **kwargs):
+            return self.call(func, *args, **kwargs)
+        return chrono_wrapper
+    
+
+    def results(self, extensive : bool = False) -> Dict[Callable, List[ExecutionInfo]]:
+        """
+        Returns the execution times of all function, in the clock unit.
+
+        Results are in the form:
+            {
+                func1 : [ExecutionInfo1, ExecutionInfo2, ...],
+                func2 : ...,
+                ...
+            }
+
+        If extensive is True, when a function passes to another timed function, its own chronometer keeps running.
+        Otherwise, the second function's time is subtracted from the first one.
+        """
+        if not isinstance(extensive, bool):
+            raise TypeError("Expected bool, got " + repr(extensive.__class__.__name__))
+        res : Dict[Callable, List[ExecutionInfo]] = {}
+
+        entries = self.__entries.copy()
+        TIDs = {TID for time, func, level, TID, entry in entries}
+        for TID in TIDs:
+            calls : List[Tuple[Callable, int]] = []
+            last_durations = [0]
+            for time, func, level, TID, entry in filter(lambda x : x[3] == TID, entries):
+                if entry:
+                    calls.append((func, time))
+                    last_durations.append(0)
+                else:
+                    _, last_time = calls.pop()
+                    duration = time - last_time
+                    children_duration = last_durations.pop()
+                    last_durations[-1] += duration
+                    if not extensive:
+                        duration -= children_duration
+                    if func not in res:
+                        res[func] = []
+                    result = ExecutionInfo()
+                    res[func].append(result)
+                    result.function = func
+                    result.duration = duration
+                    result.level = level
+                    result.thread = TID
+        
+        return res
+
+
+
+
+def __default_conversion(t : int | float) -> float:
+    if isinstance(t, float):        # Already in seconds
+        return t
+    elif isinstance(t, int):
+        return t / 1000000000       # From nanoseconds to seconds
+    else:
+        raise TypeError("Unable to automatically convert type '{}' to seconds".format(t.__class__.__name__))
+
+
+def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[Any], float] = __default_conversion):
+    """
+    Shows a report featuring the average execution time, number of executions and proportions of all functions.
+    If you are using a clock with a custom unit, you should give a function to convert your time values to seconds.
+    If you are using a second (float) or nanosecond (int) clock the conversion is automatic.
+    """
+
+    def avg(it : Iterable[Complex]) -> Complex:
+        l = list(it)
+        if not l:
+            raise ValueError("Average of zero values")
+        return sum(l) / len(l)
+
+    if not isinstance(c, Chrono):
+        raise TypeError("Expected a Chrono object, got " + repr(c.__class__.__name__))
+    if not isinstance(extensive, bool):
+        raise TypeError("Expected bool, got " + repr(extensive.__class__.__name__))
+    from format import duration
+
+    report = c.results(extensive)
+    non_extensive_report = c.results()
+    N_func = len(report)
+    total_duration = sum(sum(to_seconds(ex_inf.duration) for ex_inf in executions) for executions in non_extensive_report.values())
+
+    if total_duration == 0:
+        print("No tests were run (zero total duration)...")
+        return
+
+    print("Execution report featuring {} functions or methods, over {}.".format(N_func, duration(total_duration)))
+    print("Per function results :")
+    
+    for func, executions in report.items():
+        subtotal_duration = sum(to_seconds(ex_inf.duration) for ex_inf in executions)
+        average_duration = avg(to_seconds(ex_inf.duration) for ex_inf in executions)
+        proportion = subtotal_duration / total_duration
+        n = len(executions)
+
+        print("Function {:<10s}\n\tCalls : {:<5}, Total : {:^10s}, Average : {:^10s}, Proportion : {:^5s}% of the time".format(repr(func.__name__) if hasattr(func, "__name__") else str(func), str(n), duration(subtotal_duration), duration(average_duration), str(round(proportion * 100, 2))))
