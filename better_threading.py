@@ -7,6 +7,8 @@ import atexit
 from threading import Event, RLock, Thread
 from typing import Any, Callable, Iterable, Mapping, Set
 
+__all__ = ["DaemonThread", "FallenThread"]
+
 
 
 class DaemonThread(Thread):
@@ -170,4 +172,3 @@ def save_fallen_threads():
 del save_fallen_threads, Any, Callable, Iterable, Mapping, Set, Event, RLock, Thread, atexit
 
 
-__all__ = ["DaemonThread", "FallenThread"]
