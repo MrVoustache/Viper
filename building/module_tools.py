@@ -1,9 +1,22 @@
-from typing import Any, Optional, Callable
+"""
+This module contains some tools to clean/modify importation of modules.
+"""
+
+
+from typing import Any, Optional
+
+__all__ = ["replace_module", "get_if_imported", "clean_annotations"]
+
+
+
+
+
 
 def replace_module(name : str, value : Any) -> None:
     """
     Replaces the module with given name by value.
     Warning : this is permanent during the lifetime of this interpreter.
+    For example, a module which only contains a class with the same name might be replaced by the class itself.
     """
     if name.__class__ != str:
         raise TypeError("Name must be a str, got "+repr(name.__class__.__name__))
@@ -16,7 +29,7 @@ def replace_module(name : str, value : Any) -> None:
 def get_if_imported(module : str, value : Optional[str] = None) -> Any:
     """
     Returns the module or object in the module if it has been loaded.
-    Returns None otherwise.
+    Raises ModuleNotFoundError otherwise.
     """
     if module.__class__ != str or (value != None and value.__class__ != str):
         raise TypeError("Expected str, str or None, got "+repr(module.__class__.__name__)+" and "+repr(value.__class__.__name__))
@@ -24,8 +37,10 @@ def get_if_imported(module : str, value : Optional[str] = None) -> Any:
     if module in sys.modules:
         m = sys.modules[module]
         if value != None and value in dir(m):
-            return dir(m)[value]
+            return getattr(m, value)
         return m
+    raise ModuleNotFoundError("Module '{}' has not been imported yet".format(module))
+
 
 def clean_annotations(*clss : type) -> None:
     """
@@ -34,16 +49,13 @@ def clean_annotations(*clss : type) -> None:
 
     Example:
 
-    class Foo:
-
-        def new(self) -> 'Foo':
-            return Foo()
-    
-    clean_annotations(Foo)
-
-    print(Foo.new.__annotations__)
-
-    >>> {'return': <class '__main__.Foo'>}
+    >>> class Foo:
+    ... def new(self) -> 'Foo':
+    ...     ...
+    ...
+    >>> clean_annotations(Foo)
+    >>> print(Foo.new.__annotations__)
+    {'return': <class '__main__.Foo'>}
 
     When given multiple classes, it will also clean them globally (cleaning the appearances of each class into each other).
     """
@@ -78,26 +90,6 @@ def clean_annotations(*clss : type) -> None:
             for k, ann in obj.__annotations__.items():
                 obj.__annotations__[k] = clean_typing(ann, name, cls)
 
-def buffer_function(f : Callable) -> Callable:
 
-    _buffer = []
-    _dict_buffer = {}
-
-    def buffered_f(*args, **kwargs):
-        try:
-            if (args, kwargs) in _dict_buffer:
-                return _dict_buffer[args, kwargs]
-        except TypeError:
-            for k, v in _buffer:
-                if k == (args, kwargs):
-                    return v
-        r = f(*args, **kwargs)
-        try:
-            _dict_buffer[args, kwargs] = r
-        except:
-            _buffer.append(((args, kwargs), r))
-        return r
-    
-    return buffered_f
 
 del Any, Optional
