@@ -5,6 +5,11 @@ This module adds some useful minor tools for debug.
 
 from typing import Any
 
+__all__ = ["TimedPrint"]
+
+
+
+
 
 class TimedPrint:
 
@@ -49,3 +54,6 @@ class TimedPrint:
         Sets the minimum delay to given value (in seconds).
         """
         self._delay = round(delay * 1000000000)
+
+
+del Any
