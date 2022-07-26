@@ -1,5 +1,16 @@
+"""
+This module allows to precisely measure the execution time of one or multiple function during the execution of a program.
+You can also generate execution reports.
+This is made to improve the speed of your scripts.
+"""
+
+
 from numbers import Complex
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+
+__all__ = ["ExecutionInfo", "Chrono", "print_report"]
+
+
 
 
 
@@ -24,7 +35,7 @@ class ExecutionInfo:
 
     
     def __str__(self) -> str:
-        return "[Function {} lasted {} units in thread #{} at level {}]".format(self.function.__name__, self.duration, self.thread, self.level)
+        return "[Function {} lasted {} units of time in thread #{} at level {}]".format(self.function.__name__, self.duration, self.thread, self.level)
 
 
 
@@ -33,12 +44,15 @@ class Chrono:
 
     """
     A chronometer class. Allows to measure execution time of multiple functions in a program (even at multiple levels).
-    Can be used as a function decorator.
+    Can be used as a function decorator, timing every run of the function.
 
-    A Chrono instance can take a custom clock function as argument. This should be a function with no arguments and should return an integer.
+    A Chrono instance can take a custom clock function as argument. This should be a function with no arguments and should return a number.
+    Careful : the default clock is process_time_ns (that measures CPU time for this process only). For example, using sleep won't make time pass.
     """
 
     def __init__(self, clock : Optional[Callable[[], Any]] = None) -> None:
+        from typing import Dict, List, Tuple, Callable
+
         if clock == None:
             from time import process_time_ns
             clock = process_time_ns
@@ -57,6 +71,7 @@ class Chrono:
     def call(self, func : Callable, *args : Any, **kwargs : Any) -> Any:
         """
         Calls function with given arguments and measures its execution time.
+        Returns what the function returns.
         """
         from threading import get_ident
         TID = get_ident()
@@ -83,6 +98,7 @@ class Chrono:
     def __call__(self, func : Callable) -> Any:
         """
         Implements the decorator of a function.
+        A function decorated with a chrono will be timed every time it is called.
         """
         def chrono_wrapper(*args, **kwargs):
             return self.call(func, *args, **kwargs)
@@ -103,6 +119,8 @@ class Chrono:
         If extensive is True, when a function passes to another timed function, its own chronometer keeps running.
         Otherwise, the second function's time is subtracted from the first one.
         """
+        from typing import Dict, List, Callable, Tuple
+
         if not isinstance(extensive, bool):
             raise TypeError("Expected bool, got " + repr(extensive.__class__.__name__))
         res : Dict[Callable, List[ExecutionInfo]] = {}
@@ -138,6 +156,9 @@ class Chrono:
 
 
 def __default_conversion(t : int | float) -> float:
+    """
+    Converts to seconds, assuming a float is in seconds and an integer is in nanoseconds
+    """
     if isinstance(t, float):        # Already in seconds
         return t
     elif isinstance(t, int):
@@ -152,6 +173,8 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
     If you are using a clock with a custom unit, you should give a function to convert your time values to seconds.
     If you are using a second (float) or nanosecond (int) clock the conversion is automatic.
     """
+    from typing import Iterable
+    from numbers import Complex
 
     def avg(it : Iterable[Complex]) -> Complex:
         l = list(it)
@@ -184,3 +207,7 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
         n = len(executions)
 
         print("Function {:<10s}\n\tCalls : {:<5}, Total : {:^10s}, Average : {:^10s}, Proportion : {:^5s}% of the time".format(repr(func.__name__) if hasattr(func, "__name__") else str(func), str(n), duration(subtotal_duration), duration(average_duration), str(round(proportion * 100, 2))))
+
+
+
+del __default_conversion, Any, Callable, Dict, Iterable, List, Optional, Tuple, Complex
