@@ -90,8 +90,7 @@ class InstanceReferencingClass(type):
         Implements the iteration over the class' instances
         """
         # A copy of the WeakSet is necessary (in case of creation or deletion)
-        for ist in set(self.__instances):
-            yield ist
+        return iter(set(self.__instances))
     
     def __len__(self) -> int:
         """
@@ -178,8 +177,7 @@ class InstancePreservingClass(type):
         Implements the iteration over the class' instances
         """
         # A copy of the WeakSet is necessary (in case of creation or deletion)
-        for ist in self.__instances.copy():
-            yield ist
+        return iter(self.__instances.copy())
     
     def __len__(self) -> int:
         """
