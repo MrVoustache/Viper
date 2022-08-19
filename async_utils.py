@@ -8,6 +8,8 @@ import asyncio
 from typing import Any, Awaitable, Optional
 
 __all__ = ["IndependantLoop", "SelectLoop"]
+if hasattr(asyncio, "ProactorEventLoop"):
+    __all__.append("ProactorLoop")
 
 
 
@@ -61,5 +63,7 @@ class IndependantLoop:
 
 
 SelectLoop = IndependantLoop(asyncio.SelectorEventLoop())
+if hasattr(asyncio, "ProactorEventLoop"):
+    ProactorLoop = IndependantLoop(asyncio.ProactorEventLoop())
 
 del asyncio, Any, Awaitable, Optional
