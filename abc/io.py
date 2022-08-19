@@ -106,7 +106,7 @@ class BytesIOBase(metaclass = ABCMeta):
 class BytesReader(BytesIOBase):
 
     """
-    This class describes and interface for reading from a bytes stream.
+    This class describes an interface for reading from a bytes stream.
     """
 
     @abstractmethod
