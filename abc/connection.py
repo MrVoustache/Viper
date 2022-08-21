@@ -4,7 +4,7 @@ These are closer to the Connection objects from the multiprocessing package than
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Any, Optional
+from typing import Optional
 
 
 
@@ -170,3 +170,7 @@ class Connection(Sender, Receiver):
     """
     This class describes the interface of a bidirectional connection.
     """
+
+
+
+del ABCMeta, abstractmethod, Optional
