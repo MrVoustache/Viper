@@ -29,9 +29,8 @@ class Address(metaclass = ABCMeta):
     def __reduce__(self) -> str | tuple:
         raise NotImplementedError()
 
-    @abstractmethod
     def __str__(self) -> str:
-        raise NotImplementedError()
+        return type(self).__name__ + " object pointing at " + str(self.to_int())
     
     def to_int(self) -> int:
         """
