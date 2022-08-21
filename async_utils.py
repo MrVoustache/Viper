@@ -5,7 +5,7 @@ For example, an instance of IndependantLoop can be used to await a couroutine th
 
 
 import asyncio
-from typing import Any, Awaitable, Optional
+from typing import Any, Awaitable, Coroutine, Optional, TypeVar
 
 __all__ = ["IndependantLoop", "SelectLoop"]
 if hasattr(asyncio, "ProactorEventLoop"):
@@ -13,7 +13,7 @@ if hasattr(asyncio, "ProactorEventLoop"):
 
 
 
-
+T = TypeVar("T")
 class IndependantLoop:
 
     """
@@ -33,7 +33,7 @@ class IndependantLoop:
         while not self.loop.is_running():
             pass
 
-    async def run(self, coro : Awaitable, *, timeout : float = float("inf"), default : Any = None):
+    async def run(self, coro : Awaitable[T], *, timeout : float = float("inf"), default : Any = None) -> T:
         """
         Runs coroutine coro in the background event loop and awaits it in the current loop.
         If given, waits at most timeout and returns default if timeout runs out before coroutine finishes.
