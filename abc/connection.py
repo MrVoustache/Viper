@@ -18,6 +18,14 @@ class BufferTooSmall(Exception):
 
 
 
+class ConnectionClosedError(ConnectionError):
+
+    """
+    This exception is raised when an operation is attempted on a closed connection object.
+    """
+
+
+
 
 class Address(metaclass = ABCMeta):
 
