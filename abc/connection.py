@@ -4,7 +4,7 @@ These are closer to the Connection objects from the multiprocessing package than
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import AsyncIterator, Iterator, Optional
 
 
 
@@ -117,7 +117,7 @@ class Sender(ConnectionBase):
     def send(self, data : bytes | bytearray | memoryview, offset : int = 0, size : Optional[int] = None, /):
         """
         Sends all of data to the other side of the connection. Blocks if necessary.
-        If given, will start sending data from offset instead of the beginning of the buffer.
+        If given, will start sending the message from offset instead of the beginning of the buffer.
         If given, will send at most size bytes (sends all bytes available otherwise).
         Raises ConnectionError of failure.
         """
@@ -142,8 +142,8 @@ class Receiver(ConnectionBase):
     @abstractmethod
     def recv(self) -> bytes:
         """
-        Receives a packet of bytes from the other side. Blocks until the next packet arrives.
-        The size of the packet is the size of the buffer passed to send() by the other side.
+        Receives a message of bytes from the other side. Blocks until the next message arrives.
+        The size of the message is the size of the buffer passed to send() by the other side.
         """
         raise NotImplementedError()
     
@@ -157,7 +157,7 @@ class Receiver(ConnectionBase):
     @abstractmethod
     def recv_into(buffer : bytearray | memoryview, offset : int = 0) -> int:
         """
-        Receives the next packet in the given buffer and returns the size of the packet.
+        Receives the next message in the given buffer and returns the size of the message.
         If given, will only start writing at offset position in the buffer.
         If the buffer doesn't have enough space to write the message, raises BufferTooSmall. An empty bytearray can also be given, and will be allocated with the corresponding size.
         """
@@ -168,6 +168,20 @@ class Receiver(ConnectionBase):
         """
         Asynchronous version of recv_into.
         """
+
+    def __iter__(self) -> Iterator[bytes]:
+        """
+        Iterates over all the messages received.
+        """
+        while not self.closed:
+            yield self.recv()
+    
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        """
+        Asynchronously iterates over all the messages received.
+        """
+        while not self.closed:
+            yield await self.arecv()
 
 
 
@@ -180,4 +194,4 @@ class Connection(Sender, Receiver):
 
 
 
-del ABCMeta, abstractmethod, Optional
+del ABCMeta, abstractmethod, Optional, Iterator, AsyncIterator
