@@ -187,7 +187,7 @@ class BytesWriter(BytesIOBase):
         raise NotImplementedError()
 
     @abstractmethod
-    def write(self, data : bytes | bytearray | memoryview) -> int:
+    def write(self, data : bytes | bytearray | memoryview, /) -> int:
         """
         Writes as much of data to the stream. Returns the number of bytes written.
         If not blocking, returns the number of bytes successfully written, even if no bytes could be written.
@@ -198,7 +198,7 @@ class BytesWriter(BytesIOBase):
         raise NotImplementedError()
     
     @abstractmethod
-    async def awrite(self, data : bytes | bytearray | memoryview) -> int:
+    async def awrite(self, data : bytes | bytearray | memoryview, /) -> int:
         """
         Asynchronous version of write.
         Should wait only if write would block.
