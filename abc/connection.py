@@ -4,7 +4,7 @@ These are closer to the Connection objects from the multiprocessing package than
 """
 
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 
 
@@ -15,6 +15,40 @@ class BufferTooSmall(Exception):
     """
     This exception means that the given buffer was not big enough to complete an operation it was provided for.
     """
+
+
+
+
+class Address(metaclass = ABCMeta):
+
+    """
+    This class describes the minimum requirements for address objects.
+    """
+
+    @abstractmethod
+    def __reduce__(self) -> str | tuple:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def __str__(self) -> str:
+        raise NotImplementedError()
+    
+    def to_int(self) -> int:
+        """
+        Returns an integer that represents the address. Call Address.from_int() on the result to get back the same address.
+        """
+        from random import randbytes
+        from pickle import dumps
+        return int.from_bytes(randbytes(1) + dumps(self) + randbytes(1), "little")
+
+    @classmethod
+    def from_int(i : int) -> "Address":
+        """
+        Returns the address associated to the given interger. Get such an integer by calling add.to_int() on an Address object.
+        """
+        from pickle import loads
+        return loads(i.to_bytes((i.bit_length() + 7) // 8, "little")[1:-1])
+
 
 
 
@@ -44,6 +78,22 @@ class ConnectionBase(metaclass = ABCMeta):
     def closed(self) -> bool:
         """
         Returns True if the connection has already been closed
+        """
+        raise NotImplementedError()
+    
+    @property
+    @abstractmethod
+    def local_address(self) -> Address:
+        """
+        Returns the local address of the connection (the Address object that the other side would get by calling remote_address on their Connection object).
+        """
+        raise NotImplementedError()
+    
+    @property
+    @abstractmethod
+    def remote_address(self) -> Address:
+        """
+        Returns the address that the object is connected to.
         """
         raise NotImplementedError()
     
