@@ -49,7 +49,7 @@ class Address(metaclass = ABCMeta):
         return int.from_bytes(randbytes(1) + dumps(self) + randbytes(1), "little")
 
     @classmethod
-    def from_int(i : int) -> "Address":
+    def from_int(i : int, /) -> "Address":
         """
         Returns the address associated to the given interger. Get such an integer by calling add.to_int() on an Address object.
         """
