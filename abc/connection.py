@@ -155,7 +155,7 @@ class Receiver(ConnectionBase):
         raise NotImplementedError()
     
     @abstractmethod
-    def recv_into(buffer : bytearray | memoryview, offset : int = 0, /) -> int:
+    def recv_into(self, buffer : bytearray | memoryview, offset : int = 0, /) -> int:
         """
         Receives the next message in the given buffer and returns the size of the message.
         If given, will only start writing at offset position in the buffer.
@@ -164,7 +164,7 @@ class Receiver(ConnectionBase):
         raise NotImplementedError()
     
     @abstractmethod
-    async def arecv_into(buffer : bytearray | memoryview, offset : int = 0, /) -> int:
+    async def arecv_into(self, buffer : bytearray | memoryview, offset : int = 0, /) -> int:
         """
         Asynchronous version of recv_into.
         """
