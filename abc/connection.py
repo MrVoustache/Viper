@@ -179,7 +179,7 @@ class Receiver(ConnectionBase):
     @abstractmethod
     def poll(self, timeout : float = 0.0, /) -> bool:
         """
-        Waits at most timeout and returns True when a message has been received. Returns False if the tmeout has been reached and no message was received.
+        Waits at most timeout and returns True when a message has been received. Returns False if the timeout has been reached and no message was received.
         By default, the timeout is 0. You can set an infinite timeout.
         """
         raise NotImplementedError()
