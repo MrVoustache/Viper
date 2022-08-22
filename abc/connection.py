@@ -174,6 +174,22 @@ class Receiver(ConnectionBase):
         """
         Asynchronous version of recv_into.
         """
+        raise NotImplementedError()
+    
+    @abstractmethod
+    def poll(self, timeout : float = 0.0) -> bool:
+        """
+        Waits at most timeout and returns True when a message has been received. Returns False if the tmeout has been reached and no message was received.
+        By default, the timeout is 0. You can set an infinite timeout.
+        """
+        raise NotImplementedError()
+    
+    @abstractmethod
+    async def apoll(self, timeout : float = 0.0) -> bool:
+        """
+        Asynchronous version of poll.
+        """
+        raise NotImplementedError()
 
     def __iter__(self) -> Iterator[bytes]:
         """
