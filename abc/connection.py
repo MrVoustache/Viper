@@ -104,6 +104,12 @@ class ConnectionBase(metaclass = ABCMeta):
         """
         raise NotImplementedError()
     
+    def __del__(self):
+        """
+        Implements destruction of self.
+        """
+        self.close()
+    
 
 
 
