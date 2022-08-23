@@ -4,10 +4,11 @@ This module adds new classes of threads, including one for deamonic threads, but
 
 
 import atexit
+from concurrent.futures import ThreadPoolExecutor
 from threading import Event, RLock, Thread
 from typing import Any, Callable, Iterable, Mapping, Set
 
-__all__ = ["DaemonThread", "FallenThread"]
+__all__ = ["DaemonThread", "FallenThread", "DeamonPoolExecutor"]
 
 
 
@@ -167,8 +168,41 @@ def save_fallen_threads():
     d = DaemonThread(target = _check)   # Checker thread to join
     d.start()
     d.join()
+
+
+
+
+class DeamonPoolExecutor(ThreadPoolExecutor):
+
+    def _adjust_thread_count(self) -> None:
+
+        from concurrent.futures.thread import _worker, _threads_queues
+        import weakref
+        # if idle threads are available, don't spin new threads
+        if self._idle_semaphore.acquire(timeout=0):
+            return
+
+        # When the executor gets lost, the weakref callback will wake up
+        # the worker threads.
+        def weakref_cb(_, q=self._work_queue):
+            q.put(None)
+
+        num_threads = len(self._threads)
+        if num_threads < self._max_workers:
+            thread_name = '%s_%d' % (self._thread_name_prefix or self,
+                                     num_threads)
+            t = DaemonThread(name=thread_name, target=_worker,
+                                 args=(weakref.ref(self, weakref_cb),
+                                       self._work_queue,
+                                       self._initializer,
+                                       self._initargs))
+            t.start()
+            self._threads.add(t)
+            _threads_queues[t] = self._work_queue
+
+
     
 
-del save_fallen_threads, Any, Callable, Iterable, Mapping, Set, Event, RLock, Thread, atexit
+del save_fallen_threads, Any, Callable, Iterable, Mapping, Set, Event, RLock, Thread, atexit, ThreadPoolExecutor
 
 
