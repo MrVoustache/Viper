@@ -55,7 +55,7 @@ class FallenThread(DaemonThread):
     _activation_lock = RLock()
     _new_fallen = Event()
 
-    def __init__(self, finalizing_callback : Callable[..., Any], group: None = None, target: Callable[..., Any] | None = None, name: str | None = None, args: Iterable[Any] = (), kwargs: Mapping[str, Any] | None = None) -> None:
+    def __init__(self, finalizing_callback : Callable[[], None], group: None = None, target: Callable[..., Any] | None = None, name: str | None = None, args: Iterable[Any] = (), kwargs: Mapping[str, Any] | None = None) -> None:
         with FallenThread._activation_lock:
             super().__init__(group, target, name, args, kwargs)
 
