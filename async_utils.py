@@ -5,9 +5,10 @@ For example, an instance of IndependantLoop can be used to await a couroutine th
 
 
 import asyncio
-from typing import Any, Awaitable, Coroutine, Optional, TypeVar
+from socket import socket
+from typing import Any, Awaitable, Optional, TypeVar
 
-__all__ = ["IndependantLoop", "SelectLoop"]
+__all__ = ["IndependantLoop", "SelectLoop", "sock_poll_recv", "sock_poll_send"]
 if hasattr(asyncio, "ProactorEventLoop"):
     __all__.append("ProactorLoop")
 
@@ -66,4 +67,66 @@ SelectLoop = IndependantLoop(asyncio.SelectorEventLoop())
 if hasattr(asyncio, "ProactorEventLoop"):
     ProactorLoop = IndependantLoop(asyncio.ProactorEventLoop())
 
-del asyncio, Any, Awaitable, Optional
+
+
+async def sock_poll_recv(sock : socket, timeout : float = 0.0) -> bool:
+    """
+    Asynchronously waits at most timeout and returns True when a message has been received on th given socket object. Returns False if the timeout has been reached and no message was received.
+    By default, the timeout is 0. You can set an infinite timeout.
+    """
+    try:
+        timeout = float(timeout)
+    except:
+        pass
+    from socket import socket
+    if not isinstance(sock, socket):
+        raise TypeError("Expected socket object, got " + repr(type(sock).__name__))
+    if not isinstance(timeout, float):
+        raise TypeError("Expected float, got " + repr(type(timeout).__name__))
+    if timeout < 0 or timeout == float("nan"):
+        raise ValueError("Expected positive timeout, got " + repr(timeout))
+    from asyncio import Future, InvalidStateError
+    fut = Future(loop = SelectLoop.loop)
+    def resolve():
+        try:
+            fut.set_result(True)
+        except InvalidStateError:
+            pass
+        SelectLoop.loop.remove_reader(sock.fileno())
+    SelectLoop.loop.add_reader(sock.fileno(), resolve)
+    res = await SelectLoop.run(fut, timeout = timeout, default = False)
+    SelectLoop.loop.remove_reader(sock.fileno())
+    return res
+
+async def sock_poll_send(sock : socket, timeout : float = 0.0) -> bool:
+    """
+    Asynchronously waits at most timeout and returns True when the given socket object is ready to send data. Returns False if the timeout has been reached no data can be sent.
+    By default, the timeout is 0. You can set an infinite timeout.
+    """
+    try:
+        timeout = float(timeout)
+    except:
+        pass
+    from socket import socket
+    if not isinstance(sock, socket):
+        raise TypeError("Expected socket object, got " + repr(type(sock).__name__))
+    if not isinstance(timeout, float):
+        raise TypeError("Expected float, got " + repr(type(timeout).__name__))
+    if timeout < 0 or timeout == float("nan"):
+        raise ValueError("Expected positive timeout, got " + repr(timeout))
+    from asyncio import Future, InvalidStateError
+    fut = Future(loop = SelectLoop.loop)
+    def resolve():
+        try:
+            fut.set_result(True)
+        except InvalidStateError:
+            pass
+        SelectLoop.loop.remove_writer(sock.fileno())
+    SelectLoop.loop.add_writer(sock.fileno(), resolve)
+    res = await SelectLoop.run(fut, timeout = timeout, default = False)
+    SelectLoop.loop.remove_writer(sock.fileno())
+    return res
+
+
+
+del asyncio, Any, Awaitable, Optional, socket
