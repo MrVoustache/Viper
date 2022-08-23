@@ -139,7 +139,8 @@ async def sock_accept(sock : socket) -> Tuple[socket, Any]:
     """
     Asynchronous version of socket.accept, ** that actually works without blocking the event loop **.
     """
-    return await SelectLoop.run(SelectLoop.loop.run_in_executor(None, sock.accept))
+    from Viper.better_threading import DeamonPoolExecutor
+    return await SelectLoop.run(SelectLoop.loop.run_in_executor(DeamonPoolExecutor(1, "Async-Accept Thread #"), sock.accept))
 
 
 
