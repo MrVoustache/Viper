@@ -134,7 +134,7 @@ class BytesReader(BytesIOBase):
         raise NotImplementedError()
     
     @abstractmethod
-    def readinto(self, buffer : bytes | bytearray | memoryview, /) -> int:
+    def readinto(self, buffer : bytearray | memoryview, /) -> int:
         """
         Same as read, but reads data into pre-allocated buffer (of a given size) and returns the number of bytes read.
         """
@@ -150,7 +150,7 @@ class BytesReader(BytesIOBase):
         raise NotImplementedError()
 
     @abstractmethod
-    async def areadinto(self, buffer : bytes | bytearray | memoryview, /) -> int:
+    async def areadinto(self, buffer : bytearray | memoryview, /) -> int:
         """
         Same as aread, but reads data into pre-allocated buffer (of a given size) and returns the number of bytes read.
         """
