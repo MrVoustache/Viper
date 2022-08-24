@@ -119,6 +119,9 @@ class BytesReader(BytesIOBase):
     def readable(self) -> bool:
         return True
 
+    def writable(self) -> bool:
+        return False
+
     @abstractmethod
     def read(self, size : int = -1, /) -> bytes:
         """
@@ -172,6 +175,9 @@ class BytesWriter(BytesIOBase):
     def writable(self) -> bool:
         return True
 
+    def readable(self) -> bool:
+        return False
+
     def flush(self):
         """
         Flushes the write buffers of the stream if applicable. Does nothing by default.
@@ -214,6 +220,12 @@ class BytesIO(BytesReader, BytesWriter):
     """
     This class describes an interface for complete IO interactions with a bytes stream.
     """
+
+    def readable(self) -> bool:
+        return True
+    
+    def writable(self) -> bool:
+        return True
 
 
 
