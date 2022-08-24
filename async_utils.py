@@ -6,9 +6,9 @@ For example, an instance of IndependantLoop can be used to await a couroutine th
 
 import asyncio
 from socket import socket
-from typing import Any, Awaitable, Optional, Tuple, TypeVar
+from typing import Any, Awaitable, Callable, Optional, Tuple, TypeVar
 
-__all__ = ["IndependantLoop", "SelectLoop", "sock_poll_recv", "sock_poll_send"]
+__all__ = ["IndependantLoop", "SelectLoop", "sock_poll_recv", "sock_poll_send", "sock_accept"]
 if hasattr(asyncio, "ProactorEventLoop"):
     __all__.append("ProactorLoop")
 
@@ -61,6 +61,15 @@ class IndependantLoop:
         asyncio.run_coroutine_threadsafe(_run(), self.loop)
         await fut
         return fut.result()
+    
+    async def run_blocking(self, func : Callable[..., T], *args : Any, **kwargs : Any) -> T:
+        """
+        Executes the blocking function in a separate (deamon) thread with given arguments and keywork arguments and awaits its result.
+        """
+        from Viper.better_threading import DeamonPoolExecutor
+        def run():
+            return func(*args, **kwargs)
+        return await SelectLoop.run(SelectLoop.loop.run_in_executor(DeamonPoolExecutor(1, "Async-Thread #"), run))
     
     def close(self):
         self.loop.stop()
@@ -139,9 +148,8 @@ async def sock_accept(sock : socket) -> Tuple[socket, Any]:
     """
     Asynchronous version of socket.accept, ** that actually works without blocking the event loop **.
     """
-    from Viper.better_threading import DeamonPoolExecutor
-    return await SelectLoop.run(SelectLoop.loop.run_in_executor(DeamonPoolExecutor(1, "Async-Accept Thread #"), sock.accept))
+    return await SelectLoop.run_blocking(sock.accept)
 
 
 
-del asyncio, Any, Awaitable, Optional, socket
+del asyncio, Any, Awaitable, Callable, Optional, Tuple, TypeVar, T, socket
