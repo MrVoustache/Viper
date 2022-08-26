@@ -46,7 +46,7 @@ class BytesIOBase(metaclass = ABCMeta):
         """
         Closes the stream.
         """
-        raise NotADirectoryError()
+        raise NotImplementedError()
     
     @property
     @abstractmethod
@@ -54,7 +54,7 @@ class BytesIOBase(metaclass = ABCMeta):
         """
         Returns True if the stream has already been closed.
         """
-        raise NotADirectoryError()
+        raise NotImplementedError()
     
     @abstractmethod
     def tell(self) -> int:
@@ -85,7 +85,7 @@ class BytesIOBase(metaclass = ABCMeta):
         """
         Returns True if the stream can be read from (i.e. has at least a read() method).
         """
-        raise NotADirectoryError()
+        raise NotImplementedError()
     
     @abstractmethod
     def writable(self) -> bool:
