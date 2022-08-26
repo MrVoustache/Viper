@@ -43,17 +43,22 @@ class Address(metaclass = ABCMeta):
     def to_int(self) -> int:
         """
         Returns an integer that represents the address. Call Address.from_int() on the result to get back the same address.
+        NOTE : By default, this method is not secure! At least re-implement from_int().
         """
         from random import randbytes
         from pickle import dumps
         return int.from_bytes(randbytes(1) + dumps(self) + randbytes(1), "little")
 
-    @classmethod
+    @staticmethod
     def from_int(i : int, /) -> "Address":
         """
         Returns the address associated to the given interger. Get such an integer by calling add.to_int() on an Address object.
+        NOTE : By default, this method is not secure! At least re-implement it.
         """
         from pickle import loads
+        from Viper.pickle_utils import PickleVulnerabilityWarning
+        from warnings import warn
+        warn(PickleVulnerabilityWarning("The basic implementation of Address.from_int uses pickle blindly to load the pickle of your object."))
         return loads(i.to_bytes((i.bit_length() + 7) // 8, "little")[1:-1])
 
 
