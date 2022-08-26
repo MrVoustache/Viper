@@ -13,11 +13,6 @@ if hasattr(asyncio, "ProactorEventLoop"):
     __all__.append("ProactorLoop")
 
 
-class WaitUntilAsyncioIsNotTrashException():
-
-    """
-    This is self-explanatory...
-    """
                 
 
 
@@ -35,7 +30,6 @@ class IndependantLoop:
 
 
     def __init__(self, loop : Optional[asyncio.AbstractEventLoop] = None) -> None:
-        raise WaitUntilAsyncioIsNotTrashException("Asyncio is trash as it is now. Wait until they make a version in which 'await sleep(0.1)' does not block forever...")
         self.loop = loop
         from Viper.better_threading import FallenThread
         FallenThread(target=self.loop.run_forever, finalizing_callback=loop.stop).start()
@@ -72,31 +66,10 @@ class IndependantLoop:
         """
         Executes the blocking function in a separate (deamon) thread with given arguments and keywork arguments and awaits its result.
         """
-        from Viper.better_threading import DaemonThread
-        from asyncio import sleep
-        data = [None, None]
+        from Viper.better_threading import DeamonPoolExecutor
         def run():
-            try:
-                print("Executing function")
-                data[1] = func(*args, **kwargs)
-                print("Function executed")
-                data[0] = True
-            except Exception as E:
-                data[0] = False
-                data[1] = E
-            print("Exiting thread.")
-        DaemonThread(target=run).start()
-        print("Awaiting future.")
-        while True:
-            if data[0] != None:
-                break
-            else:
-                await sleep(0.1)
-        print("Future just resolved itself!")
-        if data[0]:
-            return data[1]
-        else:
-            raise data[1]
+            return func(*args, **kwargs)
+        return await SelectLoop.run(SelectLoop.loop.run_in_executor(DeamonPoolExecutor(1, "Async-Thread #"), run))
     
     def close(self):
         self.loop.stop()
@@ -107,10 +80,10 @@ class IndependantLoop:
 
 
 
-# SelectLoop = IndependantLoop(asyncio.SelectorEventLoop())
-# if hasattr(asyncio, "ProactorEventLoop"):
-#     ProactorLoop = IndependantLoop(asyncio.ProactorEventLoop())
-# BlockingLoop = IndependantLoop(asyncio.SelectorEventLoop())
+SelectLoop = IndependantLoop(asyncio.SelectorEventLoop())
+if hasattr(asyncio, "ProactorEventLoop"):
+    ProactorLoop = IndependantLoop(asyncio.ProactorEventLoop())
+BlockingLoop = IndependantLoop(asyncio.SelectorEventLoop())
 
 
 
@@ -119,7 +92,6 @@ async def sock_poll_recv(sock : socket, timeout : float = 0.0) -> bool:
     Asynchronously waits at most timeout and returns True when a message has been received on th given socket object. Returns False if the timeout has been reached and no message was received.
     By default, the timeout is 0. You can set an infinite timeout.
     """
-    raise WaitUntilAsyncioIsNotTrashException("Asyncio is trash as it is now. Wait until they make a version in which 'await sleep(0.1)' does not block forever...")
     try:
         timeout = float(timeout)
     except:
@@ -152,7 +124,6 @@ async def sock_poll_send(sock : socket, timeout : float = 0.0) -> bool:
     Asynchronously waits at most timeout and returns True when the given socket object is ready to send data. Returns False if the timeout has been reached no data can be sent.
     By default, the timeout is 0. You can set an infinite timeout.
     """
-    raise WaitUntilAsyncioIsNotTrashException("Asyncio is trash as it is now. Wait until they make a version in which 'await sleep(0.1)' does not block forever...")
     try:
         timeout = float(timeout)
     except:
@@ -184,16 +155,25 @@ async def sock_accept(sock : socket) -> Tuple[socket, Any]:
     """
     Asynchronous version of socket.accept, ** that actually works without blocking the event loop **.
     """
-    raise WaitUntilAsyncioIsNotTrashException("Asyncio is trash as it is now. Wait until they make a version in which 'await sleep(0.1)' does not block forever...")
+    import logging
     def accept():
-        print("Waiting for accept()")
+        logging.info("Socket {} entering accepting mode.".format(repr(sock)))
         res = sock.accept()
-        print("I accepted someone!")
-        BlockingLoop.loop.call_soon_threadsafe(print, "Hey!!!!!")
+        logging.info("Socket {} just accepted a connection.".format(repr(sock)))
         return res
-    print("Starting task.")
-    res = await BlockingLoop.run_blocking(accept)
-    print("Task finished!")
+    return await BlockingLoop.run_blocking(accept)
+
+async def sock_connect(sock : socket, add : Any) -> None:
+    """
+    Asynchronous version of socket.connect.
+    """
+    import logging
+    def connect():
+        logging.info("Socket {} entering connection mode.".format(repr(sock)))
+        res = sock.connect(add)
+        logging.info("Socket {} just accepted a connection.".format(repr(sock)))
+        return res
+    return await BlockingLoop.run_blocking(connect)
 
 
 
