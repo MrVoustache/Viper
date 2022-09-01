@@ -47,7 +47,12 @@ class Address(metaclass = ABCMeta):
         """
         from random import randbytes
         from pickle import dumps
-        return int.from_bytes(randbytes(1) + dumps(self) + randbytes(1), "little")
+        def randnonzero() -> bytes:
+            b = b"\0"
+            while b == b"\0":
+                b = randbytes(1)
+            return b
+        return int.from_bytes(randnonzero() + dumps(self) + randnonzero(), "little")
 
     @staticmethod
     def from_int(i : int, /) -> "Address":
