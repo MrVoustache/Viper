@@ -4,7 +4,7 @@ This module stores multiple simpler interfaces for stream manipulation.
 
 from abc import ABCMeta, abstractmethod
 from io import SEEK_CUR, SEEK_END, SEEK_SET
-from typing import Optional
+from typing import Iterable, Iterator, Optional
 
 __all__ = ["IOClosedError", "BytesIOBase", "BytesReader", "BytesWriter", "BytesIO"]
 
@@ -141,6 +141,34 @@ class BytesReader(BytesIOBase):
         raise NotImplementedError()
     
     @abstractmethod
+    def readline(self, size : int = -1, /) -> bytes:
+        """
+        Same as read, but will stop if b"\n" (newline included) is encountered while reading.
+        """
+        raise NotImplementedError()
+    
+    def readlines(self, size : int = -1, /) -> list[bytes]:
+        """
+        Same as readline, but reads multiple lines and returns a list of lines.
+        """
+        n = 0
+        lines = []
+        while n < size:
+            line = self.readline(max(size - n, -1))
+            n += len(line)
+            lines.append(line)
+        return lines
+    
+    def __iter__(self) -> Iterator[bytes]:
+        """
+        Implements iter(self). Yields successive lines.
+        """
+        line = True
+        while line:
+            line = self.readline()
+            yield line
+    
+    @abstractmethod
     async def aread(self, size : int = -1, /) -> bytes:
         """
         Asynchronous version of read.
@@ -203,6 +231,26 @@ class BytesWriter(BytesIOBase):
         """
         raise NotImplementedError()
     
+    def writelines(self, lines : Iterable[bytes | bytearray | memoryview], /) -> int:
+        """
+        Writes all the lines in the given iterable.
+        Stops if one of the lines cannot be written entirely.
+        Does not add b"\n" at the end of each line.
+        Returns the number of bytes written.
+        """
+        from typing import Iterable
+        if not isinstance(lines, Iterable):
+            raise TypeError("Expected iterable, got " + repr(type(lines).__name__))
+        n = 0
+        for line in lines:
+            if not isinstance(line, bytes | bytearray | memoryview):
+                raise TypeError("Expected iterable of bytes, bytearray or memoriview, got " + repr(type(line).__name__))
+            ni = self.write(line)
+            n += ni
+            if ni < len(line):
+                break
+        return n
+    
     @abstractmethod
     async def awrite(self, data : bytes | bytearray | memoryview, /) -> int:
         """
@@ -229,4 +277,4 @@ class BytesIO(BytesReader, BytesWriter):
 
 
 
-del ABCMeta, abstractmethod, SEEK_CUR, SEEK_END, SEEK_SET, Optional
+del ABCMeta, abstractmethod, SEEK_CUR, SEEK_END, SEEK_SET, Iterable, Iterator, Optional
