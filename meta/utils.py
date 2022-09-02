@@ -10,7 +10,7 @@ __all__ = ["signature_str"]
 
 
 
-def signature_str(f : Callable, *, init_env : dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
+def signature_str(f : Callable, *, init_env : dict[str, Any] | None = None) -> tuple[str, dict[str, Any]]:
     """
     Creates a one line string that represents the definition line of the given function (with its complete signature) and an environment dict that allows you to execute this definition with type annotations and default values.
     """
