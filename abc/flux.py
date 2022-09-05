@@ -17,17 +17,21 @@ class FluxOperator:
     """
     FluxOperators should handle a BytesReader and a BytesWriter, apply a flux operation from the input stream and write the result on the output stream.
     If the class attribute "inverse" is not None, it should be another subclass of FluxOperator that performs the inverse operation.
+    If auto_close is True, then, when run() has finished its work, it should close the destination stream.
     """
 
     inverse : Optional["FluxOperator"] = None
 
-    def __init__(self, source : BytesReader, destination : BytesWriter) -> None:
+    def __init__(self, source : BytesReader, destination : BytesWriter, *, auto_close : bool = False) -> None:
         from .io import BytesReader, BytesWriter
         if not isinstance(source, BytesReader) or not isinstance(destination, BytesWriter):
             raise TypeError("Expected BytesReader and BytesWriter, got " + repr(type(source).__name__) + " and " + repr(type(destination).__name__))
-        
+        if not isinstance(auto_close, bool):
+            raise TypeError("Expected bool for auto_close, got " + repr(type(auto_close).__name__))
+
         self.__source = source
         self.__destination = destination
+        self.__auto_close = auto_close
 
     @property
     def source(self) -> BytesReader:
@@ -43,11 +47,18 @@ class FluxOperator:
         """
         return self.__destination
     
+    @property
+    def auto_close(self) -> bool:
+        """
+        If auto_close is True, the destination stream will be closed when the work of run() is finished.
+        """
+        return self.__auto_close
+    
     @abstractmethod
     def run(self):
         """
         This method should perform the flux operation until the input stream is closed.
-        if the output stream closes first, it should raise RuntimeError.
+        If the output stream closes first, it should raise RuntimeError.
         """
         raise NotImplementedError()
     
