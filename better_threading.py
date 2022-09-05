@@ -30,6 +30,13 @@ class Future(Event, Generic[T]):
         self.__value = value
         return super().set()
     
+    def clear(self) -> None:
+        """
+        Clears the Future. Removes the associated value.
+        """
+        self.__value = None     # Do not hold references to unknown objects
+        return super().clear()
+    
     def result(self) -> T:
         """
         Waits for the Future to be resolved and returns the associated value.
