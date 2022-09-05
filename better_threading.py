@@ -6,7 +6,7 @@ This module adds new classes of threads, including one for deamonic threads, but
 import atexit
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, RLock, Thread
-from typing import Any, Callable, Iterable, Mapping, Set
+from typing import Any, Callable, Generic, Iterable, Mapping, Set, TypeVar
 
 __all__ = ["Future", "DaemonThread", "FallenThread", "DeamonPoolExecutor"]
 
@@ -14,21 +14,23 @@ __all__ = ["Future", "DaemonThread", "FallenThread", "DeamonPoolExecutor"]
 
 
 
-class Future(Event):
+T = TypeVar("T")
+
+class Future(Event, Generic[T]):
     
     """
     A Future represents an eventual value. This value might get defined at some point.
     You can wait for it like an event.
     """
 
-    def set(self, value : Any) -> None:
+    def set(self, value : T) -> None:
         """
         Sets the value of the Future.
         """
         self.__value = value
         return super().set()
     
-    def result(self) -> Any:
+    def result(self) -> T:
         """
         Waits for the Future to be resolved and returns the associated value.
         """
@@ -228,6 +230,6 @@ class DeamonPoolExecutor(ThreadPoolExecutor):
 
     
 
-del save_fallen_threads, Any, Callable, Iterable, Mapping, Set, Event, RLock, Thread, atexit, ThreadPoolExecutor
+del save_fallen_threads, Any, Callable, Iterable, Mapping, Set, Event, RLock, Thread, atexit, ThreadPoolExecutor, TypeVar, T
 
 
