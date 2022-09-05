@@ -8,7 +8,32 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event, RLock, Thread
 from typing import Any, Callable, Iterable, Mapping, Set
 
-__all__ = ["DaemonThread", "FallenThread", "DeamonPoolExecutor"]
+__all__ = ["Future", "DaemonThread", "FallenThread", "DeamonPoolExecutor"]
+
+
+
+
+
+class Future(Event):
+    
+    """
+    A Future represents an eventual value. This value might get defined at some point.
+    You can wait for it like an event.
+    """
+
+    def set(self, value : Any) -> None:
+        """
+        Sets the value of the Future.
+        """
+        self.__value = value
+        return super().set()
+    
+    def result(self) -> Any:
+        """
+        Waits for the Future to be resolved and returns the associated value.
+        """
+        self.wait()
+        return self.__value
 
 
 
