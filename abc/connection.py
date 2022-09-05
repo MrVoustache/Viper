@@ -135,7 +135,7 @@ class Sender(ConnectionBase):
         Sends all of data to the other side of the connection. Blocks if necessary.
         If given, will start sending the message from offset instead of the beginning of the buffer.
         If given, will send at most size bytes (sends all bytes available otherwise).
-        Raises ConnectionError of failure.
+        Raises ConnectionError on failure.
         """
         raise NotImplementedError()
     
@@ -160,6 +160,7 @@ class Receiver(ConnectionBase):
         """
         Receives a message of bytes from the other side. Blocks until the next message arrives.
         The size of the message is the size of the buffer passed to send() by the other side.
+        Raises ConnectionError on failure.
         """
         raise NotImplementedError()
     
