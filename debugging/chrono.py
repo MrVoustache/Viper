@@ -186,7 +186,7 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
         raise TypeError("Expected a Chrono object, got " + repr(c.__class__.__name__))
     if not isinstance(extensive, bool):
         raise TypeError("Expected bool, got " + repr(extensive.__class__.__name__))
-    from format import duration
+    from Viper.format import duration
 
     report = c.results(extensive)
     non_extensive_report = c.results()
