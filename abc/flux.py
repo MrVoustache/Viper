@@ -3,7 +3,7 @@ This module defines a flux operator.
 """
 
 from abc import abstractmethod
-from typing import Optional
+from typing import Any, Optional, Type
 from Viper.abc.io import BytesReader, BytesWriter
 
 __all__ = ["FluxOperator"]
@@ -32,6 +32,16 @@ class FluxOperator:
         self.__source = source
         self.__destination = destination
         self.__auto_close = auto_close
+    
+    @staticmethod
+    def get_init_args() -> tuple[tuple, dict[str, Any]] | Type[NotImplemented]:
+        """
+        Called by a class that wants to create a FluxOperator instance if they don't know the parameters other than source and destination.
+        It should return a tuple of positional args and a dictionary of keyword args.
+        It should ask the user if necessary (example : ask a passphrase for a cryptographic flux).
+        Returns NotImplemented if the subclass does not require additional arguments.
+        """
+        return NotImplemented
 
     @property
     def source(self) -> BytesReader:
