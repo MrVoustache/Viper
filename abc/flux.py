@@ -40,6 +40,7 @@ class FluxOperator:
         It should return a tuple of positional args and a dictionary of keyword args.
         It should ask the user if necessary (example : ask a passphrase for a cryptographic flux).
         Returns NotImplemented if the subclass does not require additional arguments.
+        Raise NotImplementedError() if supplying those arguments is not possible.
         """
         return NotImplemented
 
