@@ -2,7 +2,7 @@
 This module contains some cryptographic utilities.
 """
 
-__all__ = ["generate_salt", "derive_passphrase"]
+__all__ = ["generate_salt", "derive_passphrase", "ask_user_passphrase"]
 
 
 
@@ -48,3 +48,13 @@ def derive_passphrase(passphrase : str | bytes | bytearray | memoryview, *, salt
 
     deriver = PBKDF2HMAC(hashes.SHA512(), size, salt, round(500000 * power_factor))
     return deriver.derive(passphrase)
+
+def ask_user_passphrase(message : str = "") -> str:
+    """
+    Requests a passphrase to the user.
+    Prints message before letting the user type their passphrase (without newline).
+    """
+    if not isinstance(message, str):
+        raise TypeError("Expected str, got " + repr(type(message).__name__))
+    from getpass import getpass
+    return getpass(message)
