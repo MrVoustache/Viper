@@ -2,7 +2,7 @@
 This module contains some cryptographic utilities.
 """
 
-__all__ = ["generate_salt", "derive_passphrase", "ask_user_passphrase"]
+__all__ = ["generate_salt", "derive_passphrase", "ask_user_passphrase", "ask_user_passphrase_twice"]
 
 
 
@@ -49,7 +49,7 @@ def derive_passphrase(passphrase : str | bytes | bytearray | memoryview, *, salt
     deriver = PBKDF2HMAC(hashes.SHA512(), size, salt, round(500000 * power_factor))
     return deriver.derive(passphrase)
 
-def ask_user_passphrase(message : str = "") -> str:
+def ask_user_passphrase(message : str = "Enter passphrase >") -> str:
     """
     Requests a passphrase to the user.
     Prints message before letting the user type their passphrase (without newline).
@@ -58,3 +58,36 @@ def ask_user_passphrase(message : str = "") -> str:
         raise TypeError("Expected str, got " + repr(type(message).__name__))
     from getpass import getpass
     return getpass(message)
+
+class StupidUser(Exception):
+
+    """
+    The current user is stupid.
+    """
+
+def ask_user_passphrase_twice(message : str = "Enter passphrase >", confirm_message : str = "Re-enter the same passphrase >", failure_message : str = "The passphrase did not match. Enter a new passphrase >", max_attempts : int = 3) -> str:
+    """
+    Same as ask_user_passphrase, but asks confirmation but requirering the user to type the same passphrase again.
+    confirm_message is typed after the first input, after a newline and before the second input.
+    If the two passphrases do not match, restarts the process but message is replaced by failure_message.
+    At most max_attempts will be made.
+    """
+    if not isinstance(message, str) or not isinstance(confirm_message, str) or not isinstance(failure_message, str) or not isinstance(max_attempts, int):
+        raise TypeError("Expected str, str, str, int, got " + repr(type(message).__name__) + ", " + repr(type(confirm_message).__name__) + ", " + repr(type(failure_message).__name__) + " and " + repr(type(max_attempts).__name__))
+    if max_attempts <= 0:
+        raise TypeError("Expected positive nonzero integer for max_attempts, got " + repr(max_attempts))
+    
+    p1 = ask_user_passphrase(message)
+    p2 = ask_user_passphrase(confirm_message)
+
+    n = 1
+    while p1 != p2:
+        p1 = ask_user_passphrase(failure_message)
+        p2 = ask_user_passphrase(confirm_message)
+        if p1 == p2:
+            break
+        n += 1
+        if n >= max_attempts:
+            raise StupidUser("The user was not able to write the same passphrase twice after {} attempts...Bro!".format(n))
+    
+    return p1
