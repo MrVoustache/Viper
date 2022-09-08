@@ -18,6 +18,8 @@ class FluxOperator:
     FluxOperators should handle a BytesReader and a BytesWriter, apply a flux operation from the input stream and write the result on the output stream.
     If the class attribute "inverse" is not None, it should be another subclass of FluxOperator that performs the inverse operation.
     If auto_close is True, then, when run() has finished its work, it should close the destination stream.
+    When overloading the __init__ method, all additional arguments must have default values, as some programs may have to create instances of those objects by following the default interface.
+    If some additional information is required, the initialize() method should take care of that.
     """
 
     inverse : Optional["FluxOperator"] = None
@@ -33,16 +35,10 @@ class FluxOperator:
         self.__destination = destination
         self.__auto_close = auto_close
     
-    @staticmethod
-    def get_init_args() -> tuple[tuple, dict[str, Any]] | Type[NotImplemented]:
+    def initialize(self):
         """
-        Called by a class that wants to create a FluxOperator instance if they don't know the parameters other than source and destination.
-        It should return a tuple of positional args and a dictionary of keyword args.
-        It should ask the user if necessary (example : ask a passphrase for a cryptographic flux).
-        Returns NotImplemented if the subclass does not require additional arguments.
-        Raise NotImplementedError() if supplying those arguments is not possible.
+        Called before run(). Does nothing by default.
         """
-        return NotImplemented
 
     @property
     def source(self) -> BytesReader:
