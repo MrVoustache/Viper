@@ -14,15 +14,15 @@ __all__ = ["SecuritySession"]
 class SecuritySession:
 
     """
-    A security session is a keychain in which you can put and access security keys without saving them at any point.
+    A security session is a keychain in which you can put and access security keys and passwords/passphrases without saving them at any point.
     """
 
     def __init__(self, *, private : bool = True) -> None:
         if not isinstance(private, bool):
             raise TypeError("Expected bool for module_share, got " + repr(type(private).__name__))
 
-        __keychain : set[bytes] = set()
-        __named_keychain : dict[str, bytes] = {}
+        __keychain : set[bytes | str] = set()
+        __named_keychain : dict[str, bytes | str] = {}
 
         from inspect import stack
         from typing import Iterator
@@ -38,13 +38,13 @@ class SecuritySession:
 
         __user_stacktrace = module_stacktrace()
 
-        def __keys() -> Iterator[bytes]:
+        def __keys() -> Iterator[bytes | str]:
             if private and __user_stacktrace != module_stacktrace():
                 raise ForbiddenSessionAccess("Cannot access this SecuritySession from this module.")
             yield from __keychain
             yield from __named_keychain.values()
 
-        def __add(value : bytes):
+        def __add(value : bytes | str):
             if private and __user_stacktrace != module_stacktrace():
                 raise ForbiddenSessionAccess("Cannot access this SecuritySession from this module.")
             __keychain.add(value)
@@ -56,10 +56,10 @@ class SecuritySession:
                 raise KeyError("No key with this name.")
             return __named_keychain[name]
         
-        def __set(name : str, value : bytes | None):
+        def __set(name : str, value : bytes | str | None):
             if private and __user_stacktrace != module_stacktrace():
                 raise ForbiddenSessionAccess("Cannot access this SecuritySession from this module.")
-            if isinstance(value, bytes):
+            if isinstance(value, bytes | str):
                 __named_keychain[name] = value
             if value == None:
                 if name in __named_keychain:
@@ -85,20 +85,20 @@ class SecuritySession:
         """
         return self.__private
     
-    def __iter__(self) -> Iterator[bytes]:
+    def __iter__(self) -> Iterator[bytes | str]:
         """
         Iterates over the keys in the session.
         """
         yield from self.__keys()
     
-    def add(self, value : bytes | bytearray | memoryview):
+    def add(self, value : bytes | bytearray | memoryview | str):
         """
         Adds an unamed key to the session.
         """
-        if not isinstance(value, bytes | bytearray | memoryview):
-            raise TypeError("Expected readable bytes buffer for value, got " + repr(type(value).__name__))
+        if not isinstance(value, bytes | bytearray | memoryview | str):
+            raise TypeError("Expected readable bytes buffer or str for value, got " + repr(type(value).__name__))
         try:
-            self.__add(bytes(value))
+            self.__add(bytes(value) if isinstance(value, bytearray | memoryview) else value)
         except BaseException as e:
             raise e.with_traceback(None) from None
     
@@ -114,16 +114,16 @@ class SecuritySession:
         except BaseException as e:
             raise e.with_traceback(None) from None
     
-    def __setitem__(self, name : str, value : bytes | bytearray | memoryview):
+    def __setitem__(self, name : str, value : bytes | bytearray | memoryview | str):
         """
         Adds a named key to the session.
         """
         if not isinstance(name, str):
             raise TypeError("Expected str for name, got " + repr(type(name).__class__))
-        if not isinstance(value, bytes | bytearray | memoryview):
-            raise TypeError("Expected readable bytes buffer for value, got " + repr(type(value).__name__))
+        if not isinstance(value, bytes | bytearray | memoryview | str):
+            raise TypeError("Expected readable bytes buffer or str for value, got " + repr(type(value).__name__))
         try:
-            return self.__set(name, bytes(value))
+            return self.__set(name, bytes(value) if isinstance(value, bytearray | memoryview) else value)
         except BaseException as e:
             raise e.with_traceback(None) from None
     
