@@ -49,7 +49,7 @@ def derive_passphrase(passphrase : str | bytes | bytearray | memoryview, *, salt
     deriver = PBKDF2HMAC(hashes.SHA512(), size, salt, round(500000 * power_factor))
     return deriver.derive(passphrase)
 
-def ask_user_passphrase(message : str = "Enter passphrase >") -> str:
+def ask_user_passphrase(message : str = "Enter passphrase > ") -> str:
     """
     Requests a passphrase to the user.
     Prints message before letting the user type their passphrase (without newline).
@@ -65,7 +65,7 @@ class StupidUser(Exception):
     The current user is stupid.
     """
 
-def ask_user_passphrase_twice(message : str = "Enter passphrase >", confirm_message : str = "Re-enter the same passphrase >", failure_message : str = "The passphrase did not match. Enter a new passphrase >", max_attempts : int = 3) -> str:
+def ask_user_passphrase_twice(message : str = "Enter passphrase > ", confirm_message : str = "Re-enter the same passphrase > ", failure_message : str = "The passphrase did not match. Enter a new passphrase > ", max_attempts : int = 3) -> str:
     """
     Same as ask_user_passphrase, but asks confirmation but requirering the user to type the same passphrase again.
     confirm_message is typed after the first input, after a newline and before the second input.
