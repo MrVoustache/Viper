@@ -20,6 +20,7 @@ class Future(Event, Generic[T]):
     
     """
     A Future represents an eventual value. This value might get defined at some point.
+    It can also be set to raise an exception.
     You can wait for it like an event.
     """
 
@@ -28,7 +29,15 @@ class Future(Event, Generic[T]):
         Sets the value of the Future.
         """
         self.__value = value
+        self.__ok = True
         return super().set()
+    
+    def set_exception(self, exc : BaseException) -> None:
+        """
+        Sets the future to raise an exception
+        """
+        self.__value = exc
+        self.__ok = False
     
     def clear(self) -> None:
         """
@@ -37,12 +46,26 @@ class Future(Event, Generic[T]):
         self.__value = None     # Do not hold references to unknown objects
         return super().clear()
     
-    def result(self) -> T:
+    def result(self, timeout : float = float("inf")) -> T:
         """
         Waits for the Future to be resolved and returns the associated value.
+        Raises TimeoutError if the future has not been resolved before timeout has been reached.
         """
-        self.wait()
-        return self.__value
+        try:
+            timeout = float(timeout)
+        except:
+            pass
+        if not isinstance(timeout, float):
+            raise TypeError("Expected float for timeout, got " + repr(type(timeout).__name__))
+        if timeout < 0 or timeout == float("nan"):
+            raise ValueError("Expected positive timeout, got " + repr(timeout))
+        ok = self.wait(timeout if timeout != float("inf") else None)
+        if not ok:
+            raise TimeoutError("Future has not been resolved yet")
+        if self.__ok:
+            return self.__value
+        else:
+            raise self.__value from None
 
 
 
