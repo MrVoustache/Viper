@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event, RLock, Thread
 from typing import Any, Callable, Generic, Iterable, Mapping, Set, TypeVar
 
-__all__ = ["Future", "DaemonThread", "FallPriority", "FallenThread", "DeamonPoolExecutor"]
+__all__ = ["Future", "DaemonThread", "FallPriority", "FallenThread", "DeamonPoolExecutor", "exclusive"]
 
 
 
@@ -213,6 +213,23 @@ class DeamonPoolExecutor(ThreadPoolExecutor):
             t.start()
             self._threads.add(t)
             _threads_queues[t] = self._work_queue
+
+
+
+
+
+def exclusive(f : Callable):
+
+    from threading import RLock
+    from functools import wraps
+    f_lock = RLock()
+
+    @wraps(f)
+    def exclusive_call(*args, **kwargs):
+        with f_lock:
+            return f(*args, **kwargs)
+    
+    return exclusive_call
 
 
     
