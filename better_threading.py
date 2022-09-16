@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event, RLock, Thread
 from typing import Any, Callable, Generic, Iterable, Mapping, Set, TypeVar
 
-__all__ = ["Future", "DaemonThread", "FallPriority", "FallenThread", "DeamonPoolExecutor", "exclusive"]
+__all__ = ["Future", "DaemonThread", "FallPriority", "FallenThread", "DeamonPoolExecutor", "exclusive", "critical"]
 
 
 
@@ -230,6 +230,8 @@ def exclusive(f : Callable):
             return f(*args, **kwargs)
     
     return exclusive_call
+
+critical = exclusive
 
 
     
