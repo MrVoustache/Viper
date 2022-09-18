@@ -66,6 +66,20 @@ class Address(metaclass = ABCMeta):
         warn(PickleVulnerabilityWarning("The basic implementation of Address.from_int uses pickle blindly to load the pickle of your object."))
         return loads(i.to_bytes((i.bit_length() + 7) // 8, "little")[1:-1])
 
+    @abstractmethod
+    def __eq__(self, o: object) -> bool:
+        """
+        Implements self == o.
+        """
+        raise NotImplementedError()
+    
+    @abstractmethod
+    def __hash__(self) -> int:
+        """
+        Implements hash(self).
+        """
+        raise NotImplementedError()
+
 
 
 
