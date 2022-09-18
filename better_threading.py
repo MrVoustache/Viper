@@ -6,9 +6,9 @@ This module adds new classes of threads, including one for deamonic threads, but
 import atexit
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, RLock, Thread
-from typing import Any, Callable, Generic, Iterable, Mapping, Set, TypeVar
+from typing import Any, Callable, Generic, Iterable, Mapping, ParamSpec, Set, TypeVar
 
-__all__ = ["Future", "DaemonThread", "FallPriority", "FallenThread", "DeamonPoolExecutor", "exclusive", "critical"]
+__all__ = ["Future", "DaemonThread", "FallPriority", "FallenThread", "DeamonPoolExecutor", "exclusive", "critical", "ExclusionGroup"]
 
 
 
@@ -218,19 +218,47 @@ class DeamonPoolExecutor(ThreadPoolExecutor):
 
 
 
+
+
+P = ParamSpec("P")
+T = TypeVar("T")
+class ExclusionGroup:
+
+    """
+    This is used to create a mutual exclusion group. An instance of this class can then be used as a decorator and all functions decorated with this object will be mutually exclusive.
+    """
+
+    def __init__(self) -> None:
+        from threading import RLock
+        self.__lock = RLock()
+
+    def __call__(self, f : Callable[P, T]) -> Callable[P, T]:
+        from Viper.meta.utils import signature_def, signature_call
+        from functools import wraps
+
+        sig = "@wraps(old_target)\n"
+
+        sig_def, env = signature_def(f, init_env = {"old_target" : f, "wraps" : wraps, "__lock" : self.__lock})
+        
+        code = sig + sig_def
+        
+        code += "\n\twith __lock:\n\t\t"
+
+        code += "return old_target("
+
+        sig_call = signature_call(f, decorate = False)
+
+        code += sig_call + ")"
+
+        exec(code, env)
+
+        return env[f.__name__]
+
+
 def exclusive(f : Callable):
 
-    from threading import RLock
-    from functools import wraps
-    f_lock = RLock()
-
-    @wraps(f)
-    def exclusive_call(*args, **kwargs):
-        with f_lock:
-            return f(*args, **kwargs)
+    return ExclusionGroup()(f)
     
-    return exclusive_call
-
 critical = exclusive
 
 
