@@ -16,7 +16,7 @@ def signature_def(f : Callable, *, init_env : dict[str, Any] | None = None) -> t
     """
     from inspect import signature, Parameter, _empty, isfunction
 
-    if not isfunction(f):
+    if not isinstance(f, (staticmethod, classmethod)) and not isfunction(f):
         raise TypeError("Expected function, got " + repr(type(f).__name__))
     if init_env == None:
         init_env = {}
@@ -95,7 +95,7 @@ def signature_call(f : Callable, param_arg_mapping : dict[str, str | None] | Non
     """
     from inspect import signature, Parameter, _empty, isfunction
 
-    if not isfunction(f) or (param_arg_mapping != None and not isinstance(param_arg_mapping, dict)):
+    if (not isinstance(f, (staticmethod, classmethod)) and not isfunction(f)) or (param_arg_mapping != None and not isinstance(param_arg_mapping, dict)):
         raise TypeError("Expected function and mapping or None, got " + repr(type(f).__name__) + " and " + repr(type(param_arg_mapping).__name__))
     if not isinstance(decorate, bool):
         raise TypeError("Expected bool for with_name, got " + repr(type(decorate).__name__))
