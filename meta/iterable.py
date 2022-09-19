@@ -46,10 +46,13 @@ class InstanceReferencingClass(type):
         """
         Implements the creation of a new class
         """
+        from .utils import signature_def, signature_call
+        from functools import wraps
         from weakref import WeakSet
-        from typing import Set
+
+        s = WeakSet()
         
-        def extract_slots(o : type) -> Set[str]:
+        def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
                 s = set()
             else:
@@ -57,6 +60,33 @@ class InstanceReferencingClass(type):
             return s.union(*[extract_slots(b) for b in o.__bases__])
 
         added = False
+
+        # Finding the __new__ method 
+        old_new = None
+        if "__new__" in dct:
+            old_new = dct["__new__"]
+        for b in bases:
+            if hasattr(b, "__new__"):
+                old_new = getattr(b, "__new__")
+        if old_new == None:
+            old_new = object.__new__
+
+        sig = "@wraps(old_target)\n"
+
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        
+        code = sig + sig_def
+
+        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+
+        code += "\n\tcls_set.add(res)"
+
+        code += "\n\treturn res"
+
+        exec(code, env)
+
+        dct["__new__"] = env[old_new.__name__]
+
         # if this class has __slots__, then a __weakref__ slot is necessary
         if "__slots__" in dct and "__weakref__" not in dct["__slots__"] and not any("__weakref__" in extract_slots(b) for b in bases):
             added = True
@@ -74,17 +104,8 @@ class InstanceReferencingClass(type):
             else:
                 raise
         # The WeakSet that will store all instances
-        cls.__instances = WeakSet()
+        cls.__instances = s
         return cls
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Implements creation of a class instance.
-        """
-        ist = super().__call__(*args, **kwargs)
-        # Add the created instance to the WeakSet
-        self.__instances.add(ist)
-        return ist
     
     def __iter__(self) -> Iterator[CLS]:
         """
@@ -134,9 +155,12 @@ class InstancePreservingClass(type):
         """
         Implements the creation of a new class
         """
-        from typing import Set
-        
-        def extract_slots(o : type) -> Set[str]:
+        from .utils import signature_def, signature_call
+        from functools import wraps
+
+        s = set()
+
+        def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
                 s = set()
             else:
@@ -144,6 +168,33 @@ class InstancePreservingClass(type):
             return s.union(*[extract_slots(b) for b in o.__bases__])
 
         added = False
+
+        # Finding the __new__ method 
+        old_new = None
+        if "__new__" in dct:
+            old_new = dct["__new__"]
+        for b in bases:
+            if hasattr(b, "__new__"):
+                old_new = getattr(b, "__new__")
+        if old_new == None:
+            old_new = object.__new__
+
+        sig = "@wraps(old_target)\n"
+
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        
+        code = sig + sig_def
+
+        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+
+        code += "\n\tcls_set.add(res)"
+
+        code += "\n\treturn res"
+
+        exec(code, env)
+
+        dct["__new__"] = env[old_new.__name__]
+        
         # if this class has __slots__, then a __weakref__ slot is necessary
         if "__slots__" in dct and "__weakref__" not in dct["__slots__"] and not any("__weakref__" in extract_slots(b) for b in bases):
             added = True
@@ -161,17 +212,8 @@ class InstancePreservingClass(type):
             else:
                 raise
         # The WeakSet that will store all instances
-        cls.__instances = set()
+        cls.__instances = s
         return cls
-    
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Implements creation of a class instance.
-        """
-        ist = super().__call__(*args, **kwargs)
-        # Add the created instance to the WeakSet
-        self.__instances.add(ist)
-        return ist
     
     def __iter__(self) -> Iterator[CLS]:
         """
@@ -225,6 +267,11 @@ class InstanceReferencingHierarchy(type):
         Implements the creation of a new class
         """            
         from weakref import WeakSet
+        from .utils import signature_def, signature_call
+        from functools import wraps
+
+        s = WeakSet()
+
         def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
                 s = set()
@@ -240,6 +287,33 @@ class InstanceReferencingHierarchy(type):
                 dct["__slots__"]["__weakref__"] = "The slot for the weakref of this object"
             elif isinstance(cls, (Sequence)):
                 dct["__slots__"] = list(dct["__slots__"]) + ["__weakref__"]
+        
+        # Finding the __new__ method 
+        old_new = None
+        if "__new__" in dct:
+            old_new = dct["__new__"]
+        for b in bases:
+            if hasattr(b, "__new__"):
+                old_new = getattr(b, "__new__")
+        if old_new == None:
+            old_new = object.__new__
+
+        sig = "@wraps(old_target)\n"
+
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        
+        code = sig + sig_def
+
+        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+
+        code += "\n\tcls_set.add(res)"
+
+        code += "\n\treturn res"
+
+        exec(code, env)
+
+        dct["__new__"] = env[old_new.__name__]
+
         # Creating the class
         try:
             cls = super().__new__(cls, name, bases, dct)
@@ -249,18 +323,9 @@ class InstanceReferencingHierarchy(type):
                 cls = super().__new__(cls, name, bases, dct)
             else:
                 raise
-        InstanceReferencingHierarchy.__instances[cls] = WeakSet()
+        InstanceReferencingHierarchy.__instances[cls] = s
         return cls
 
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Implements creation of a class instance.
-        """
-        ist = super().__call__(*args, **kwargs)
-        # Add the created instance to the WeakSet
-        InstanceReferencingHierarchy.__instances[self].add(ist)
-        return ist
-    
     def __iter__(self) -> Iterator[CLS]:
         """
         Implements the iteration over the class' instances
@@ -321,9 +386,12 @@ class InstancePreservingHierarchy(type):
         """
         Implements the creation of a new class
         """
-        from typing import Set
-        
-        def extract_slots(o : type) -> Set[str]:
+        from .utils import signature_def, signature_call
+        from functools import wraps
+
+        s = set()
+
+        def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
                 s = set()
             else:
@@ -331,6 +399,33 @@ class InstancePreservingHierarchy(type):
             return s.union(*[extract_slots(b) for b in o.__bases__])
 
         added = False
+
+        # Finding the __new__ method 
+        old_new = None
+        if "__new__" in dct:
+            old_new = dct["__new__"]
+        for b in bases:
+            if hasattr(b, "__new__"):
+                old_new = getattr(b, "__new__")
+        if old_new == None:
+            old_new = object.__new__
+
+        sig = "@wraps(old_target)\n"
+
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        
+        code = sig + sig_def
+
+        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+
+        code += "\n\tcls_set.add(res)"
+
+        code += "\n\treturn res"
+
+        exec(code, env)
+
+        dct["__new__"] = env[old_new.__name__]
+
         # if this class has __slots__, then a __weakref__ slot is necessary
         if "__slots__" in dct and "__weakref__" not in dct["__slots__"] and not any("__weakref__" in extract_slots(b) for b in bases):
             added = True
@@ -348,17 +443,8 @@ class InstancePreservingHierarchy(type):
             else:
                 raise
         # The WeakSet that will store all instances
-        InstancePreservingHierarchy.__instances[cls] = set()
+        InstancePreservingHierarchy.__instances[cls] = s
         return cls
-    
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Implements creation of a class instance.
-        """
-        ist = super().__call__(*args, **kwargs)
-        # Add the created instance to the WeakSet
-        InstancePreservingHierarchy.__instances[self].add(ist)
-        return ist
     
     def __iter__(self) -> Iterator[CLS]:
         """
