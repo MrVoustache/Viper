@@ -14,10 +14,10 @@ def signature_def(f : Callable, *, init_env : dict[str, Any] | None = None) -> t
     """
     Creates a one line string that represents the definition line of the given function (with its complete signature) and an environment dict that allows you to execute this definition with type annotations and default values.
     """
-    from inspect import signature, Parameter, _empty, isfunction
+    from inspect import signature, Parameter, _empty
 
-    if not isinstance(f, (staticmethod, classmethod)) and not isfunction(f):
-        raise TypeError("Expected function, got " + repr(type(f).__name__))
+    if not callable(f):
+        raise TypeError("Expected callable, got " + repr(type(f).__name__))
     if init_env == None:
         init_env = {}
     if not isinstance(init_env, dict):
@@ -93,10 +93,10 @@ def signature_call(f : Callable, param_arg_mapping : dict[str, str | None] | Non
     If not given, the argument names will be the parameter names, and all will be used.
     If decorate is False, the name of the function and prentheses won't be added at the beginning of the string.
     """
-    from inspect import signature, Parameter, _empty, isfunction
+    from inspect import signature, _empty
 
-    if (not isinstance(f, (staticmethod, classmethod)) and not isfunction(f)) or (param_arg_mapping != None and not isinstance(param_arg_mapping, dict)):
-        raise TypeError("Expected function and mapping or None, got " + repr(type(f).__name__) + " and " + repr(type(param_arg_mapping).__name__))
+    if (not callable(f)) or (param_arg_mapping != None and not isinstance(param_arg_mapping, dict)):
+        raise TypeError("Expected callable and mapping or None, got " + repr(type(f).__name__) + " and " + repr(type(param_arg_mapping).__name__))
     if not isinstance(decorate, bool):
         raise TypeError("Expected bool for with_name, got " + repr(type(decorate).__name__))
     sig = signature(f)
