@@ -1,10 +1,10 @@
 """
-Just some useful functions that help generating exacutable Python code.
+Just some useful functions that solve metaclasses conflicts and that help generating exacutable Python code.
 """
 
 from typing import Any, Callable
 
-__all__ = ["signature_def", "signature_call"]
+__all__ = ["signature_def", "signature_call", "merge"]
 
 
 
@@ -142,6 +142,23 @@ def signature_call(f : Callable, param_arg_mapping : dict[str, str | None] | Non
         call += ")"
 
     return call
+
+
+
+def merge(*types : type) -> type:
+
+    """
+    Generates a class that inherits all of the given classes in order.
+    """
+
+    for t in types:
+        if not issubclass(t, type):
+            raise TypeError("Expected classes, got " + repr(type(t).__name__))
+
+    class Mix(*types):
+        pass
+
+    return Mix
 
     
 
