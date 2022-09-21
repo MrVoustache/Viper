@@ -77,8 +77,11 @@ class InstanceReferencingClass(type):
         
         code = sig + sig_def
 
-        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
-
+        if old_new == object.__new__:       # Because object.__new__ says it would accept additional args passed to __init__, but in reality, it doesn't...
+            code += "\n\tres = old_target(args[0])"
+        else:
+            code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+            
         code += "\n\tcls_set.add(res)"
 
         code += "\n\treturn res"
@@ -185,7 +188,10 @@ class InstancePreservingClass(type):
         
         code = sig + sig_def
 
-        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+        if old_new == object.__new__:       # Because object.__new__ says it would accept additional args passed to __init__, but in reality, it doesn't...
+            code += "\n\tres = old_target(args[0])"
+        else:
+            code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
 
         code += "\n\tcls_set.add(res)"
 
@@ -297,14 +303,17 @@ class InstanceReferencingHierarchy(type):
                 old_new = getattr(b, "__new__")
         if old_new == None:
             old_new = object.__new__
-
+        
         sig = "@wraps(old_target)\n"
 
         sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
         
         code = sig + sig_def
 
-        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+        if old_new == object.__new__:       # Because object.__new__ says it would accept additional args passed to __init__, but in reality, it doesn't...
+            code += "\n\tres = old_target(args[0])"
+        else:
+            code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
 
         code += "\n\tcls_set.add(res)"
 
@@ -409,14 +418,17 @@ class InstancePreservingHierarchy(type):
                 old_new = getattr(b, "__new__")
         if old_new == None:
             old_new = object.__new__
-
+        
         sig = "@wraps(old_target)\n"
 
         sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
         
         code = sig + sig_def
 
-        code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
+        if old_new == object.__new__:       # Because object.__new__ says it would accept additional args passed to __init__, but in reality, it doesn't...
+            code += "\n\tres = old_target(args[0])"
+        else:
+            code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
 
         code += "\n\tcls_set.add(res)"
 
