@@ -222,15 +222,11 @@ class DeamonPoolExecutor(ThreadPoolExecutor):
 
 P = ParamSpec("P")
 T = TypeVar("T")
-class ExclusionGroup:
+class ExclusionGroup(type(RLock())):
 
     """
-    This is used to create a mutual exclusion group. An instance of this class can then be used as a decorator and all functions decorated with this object will be mutually exclusive.
+    This is used to create a mutual exclusion group. It is just an RLock that can be used as a decorator to make a function mutually exclusive in regards to anyone using this same RLock.
     """
-
-    def __init__(self) -> None:
-        from threading import RLock
-        self.__lock = RLock()
 
     def __call__(self, f : Callable[P, T]) -> Callable[P, T]:
         from Viper.meta.utils import signature_def, signature_call
@@ -238,7 +234,7 @@ class ExclusionGroup:
 
         sig = "@wraps(old_target)\n"
 
-        sig_def, env = signature_def(f, init_env = {"old_target" : f, "wraps" : wraps, "__lock" : self.__lock})
+        sig_def, env = signature_def(f, init_env = {"old_target" : f, "wraps" : wraps, "__lock" : self})
         
         code = sig + sig_def
         
