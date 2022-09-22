@@ -4,7 +4,7 @@ This module adds metaclasses that make classes iterable, yielding all of their i
 
 
 from typing import Any, Iterator, Sequence, TypeVar
-from weakref import WeakSet
+from weakref import WeakSet, WeakValueDictionary
 
 __all__ = ["InstanceReferencingClass", "InstancePreservingClass", "InstanceReferencingHierarchy", "InstancePreservingHierarchy"]
 
@@ -48,9 +48,9 @@ class InstanceReferencingClass(type):
         """
         from .utils import signature_def, signature_call
         from functools import wraps
-        from weakref import WeakSet
+        from weakref import WeakValueDictionary
 
-        s = WeakSet()
+        s = WeakValueDictionary()
         
         def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
@@ -73,7 +73,7 @@ class InstanceReferencingClass(type):
 
         sig = "@wraps(old_target)\n"
 
-        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_dict" : s})
         
         code = sig + sig_def
 
@@ -81,8 +81,10 @@ class InstanceReferencingClass(type):
             code += "\n\tres = old_target(args[0])"
         else:
             code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
-            
-        code += "\n\tcls_set.add(res)"
+
+        code += "\n\tfrom builtins import id"
+
+        code += "\n\tcls_dict[id(res)] = res"
 
         code += "\n\treturn res"
 
@@ -106,7 +108,7 @@ class InstanceReferencingClass(type):
                 cls = super().__new__(cls, name, bases, dct)
             else:
                 raise
-        # The WeakSet that will store all instances
+        # The Weakdict that will store all instances
         cls.__instances = s
         return cls
     
@@ -114,8 +116,7 @@ class InstanceReferencingClass(type):
         """
         Implements the iteration over the class' instances
         """
-        # A copy of the WeakSet is necessary (in case of creation or deletion)
-        return iter(set(self.__instances))
+        return iter(self.__instances.values())
     
     def __len__(self) -> int:
         """
@@ -161,7 +162,7 @@ class InstancePreservingClass(type):
         from .utils import signature_def, signature_call
         from functools import wraps
 
-        s = set()
+        s = []
 
         def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
@@ -184,7 +185,7 @@ class InstancePreservingClass(type):
 
         sig = "@wraps(old_target)\n"
 
-        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_list" : s})
         
         code = sig + sig_def
 
@@ -193,7 +194,7 @@ class InstancePreservingClass(type):
         else:
             code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
 
-        code += "\n\tcls_set.add(res)"
+        code += "\n\tcls_list.append(res)"
 
         code += "\n\treturn res"
 
@@ -217,7 +218,7 @@ class InstancePreservingClass(type):
                 cls = super().__new__(cls, name, bases, dct)
             else:
                 raise
-        # The WeakSet that will store all instances
+        # The list that will store all instances
         cls.__instances = s
         return cls
     
@@ -225,8 +226,7 @@ class InstancePreservingClass(type):
         """
         Implements the iteration over the class' instances
         """
-        # A copy of the WeakSet is necessary (in case of creation or deletion)
-        return iter(self.__instances.copy())
+        return iter(self.__instances)
     
     def __len__(self) -> int:
         """
@@ -266,17 +266,17 @@ class InstanceReferencingHierarchy(type):
     [<__main__.A object at 0x000001C607E309A0>, <__main__.A object at 0x000001C607E309D0>]
     """
 
-    __instances : dict[type[CLS], WeakSet[CLS]] = {}
+    __instances : dict[type[CLS], WeakValueDictionary[int, CLS]] = {}
 
     def __new__(cls : type[CLS], name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """            
-        from weakref import WeakSet
+        from weakref import WeakValueDictionary
         from .utils import signature_def, signature_call
         from functools import wraps
 
-        s = WeakSet()
+        s = WeakValueDictionary()
 
         def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
@@ -306,7 +306,7 @@ class InstanceReferencingHierarchy(type):
         
         sig = "@wraps(old_target)\n"
 
-        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_dict" : s})
         
         code = sig + sig_def
 
@@ -315,7 +315,9 @@ class InstanceReferencingHierarchy(type):
         else:
             code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
 
-        code += "\n\tcls_set.add(res)"
+        code += "\n\tfrom builtins import id"
+
+        code += "\n\tcls_dict[id(res)] = res"
 
         code += "\n\treturn res"
 
@@ -332,6 +334,7 @@ class InstanceReferencingHierarchy(type):
                 cls = super().__new__(cls, name, bases, dct)
             else:
                 raise
+        # The Weakdict that will store all instances
         InstanceReferencingHierarchy.__instances[cls] = s
         return cls
 
@@ -339,12 +342,9 @@ class InstanceReferencingHierarchy(type):
         """
         Implements the iteration over the class' instances
         """
-        # A copy of the WeakSet is necessary (in case of creation or deletion)
-        s = set()
         for cls, cls_set in InstanceReferencingHierarchy.__instances.items():
             if issubclass(cls, self):
-                s.update(cls_set)
-        return iter(s)
+                yield from cls_set.values()
     
     def __len__(self) -> int:
         """
@@ -389,7 +389,7 @@ class InstancePreservingHierarchy(type):
     [<__main__.B object at 0x000001C607E30A00>, <__main__.A object at 0x000001C607E309A0>, <__main__.A object at 0x000001C607E309D0>]
     """
 
-    __instances : dict[type[CLS], set[CLS]] = {}
+    __instances : dict[type[CLS], list[CLS]] = {}
 
     def __new__(cls : type[CLS], name : str, bases : tuple[type], dct : dict):
         """
@@ -398,7 +398,7 @@ class InstancePreservingHierarchy(type):
         from .utils import signature_def, signature_call
         from functools import wraps
 
-        s = set()
+        s = []
 
         def extract_slots(o : type) -> set[str]:
             if not hasattr(o, "__slots__"):
@@ -421,7 +421,7 @@ class InstancePreservingHierarchy(type):
         
         sig = "@wraps(old_target)\n"
 
-        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_set" : s})
+        sig_def, env = signature_def(old_new, init_env = {"old_target" : old_new, "wraps" : wraps, "cls_list" : s})
         
         code = sig + sig_def
 
@@ -430,7 +430,7 @@ class InstancePreservingHierarchy(type):
         else:
             code += "\n\tres = old_target(" + signature_call(old_new, decorate=False) + ")"
 
-        code += "\n\tcls_set.add(res)"
+        code += "\n\tcls_list.append(res)"
 
         code += "\n\treturn res"
 
@@ -454,7 +454,7 @@ class InstancePreservingHierarchy(type):
                 cls = super().__new__(cls, name, bases, dct)
             else:
                 raise
-        # The WeakSet that will store all instances
+        # The list that will store all instances
         InstancePreservingHierarchy.__instances[cls] = s
         return cls
     
@@ -462,12 +462,9 @@ class InstancePreservingHierarchy(type):
         """
         Implements the iteration over the class' instances
         """
-        # A copy of the WeakSet is necessary (in case of creation or deletion)
-        s = set()
         for cls, cls_set in InstancePreservingHierarchy.__instances.items():
             if issubclass(cls, self):
-                s.update(cls_set)
-        return iter(s)
+                yield from cls_set
     
     def __len__(self) -> int:
         """
