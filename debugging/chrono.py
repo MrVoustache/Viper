@@ -6,7 +6,7 @@ This is made to improve the speed of your scripts.
 
 
 from numbers import Complex
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, ParamSpec, Tuple, TypeVar
 
 __all__ = ["ExecutionInfo", "Chrono", "print_report"]
 
@@ -39,6 +39,9 @@ class ExecutionInfo:
 
 
 
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 class Chrono:
 
@@ -95,14 +98,33 @@ class Chrono:
         return res
     
 
-    def __call__(self, func : Callable) -> Any:
+    def __call__(self, func : Callable[P, R]) -> Callable[P, R]:
         """
         Implements the decorator of a function.
         A function decorated with a chrono will be timed every time it is called.
         """
-        def chrono_wrapper(*args, **kwargs):
-            return self.call(func, *args, **kwargs)
-        return chrono_wrapper
+        from Viper.meta.utils import signature_def, signature_call
+        from functools import wraps
+
+        sig = "@wraps(old_target)\n"
+
+        sig_def, env = signature_def(func, init_env = {"old_target" : func, "self" : self, "wraps" : wraps})
+        
+        code = sig + sig_def
+        
+        code += "\n\t"
+
+        code += "return self.call(old_target, "
+
+        sig_call = signature_call(func, decorate = False)
+
+        code += sig_call + ")"
+                
+        code += "\n"
+
+        exec(code, env)
+
+        return env[func.__name__]
     
 
     def results(self, extensive : bool = False) -> Dict[Callable, List[ExecutionInfo]]:
@@ -210,4 +232,4 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
 
 
 
-del __default_conversion, Any, Callable, Dict, Iterable, List, Optional, Tuple, Complex
+del __default_conversion, Any, Callable, Dict, Iterable, List, Optional, ParamSpec, Tuple, TypeVar, Complex, P, R
