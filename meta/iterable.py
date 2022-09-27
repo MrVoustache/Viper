@@ -116,7 +116,7 @@ class InstanceReferencingClass(type):
         """
         Implements the iteration over the class' instances
         """
-        return iter(self.__instances.values())
+        return iter(set(self.__instances.values()))
     
     def __len__(self) -> int:
         """
@@ -342,16 +342,16 @@ class InstanceReferencingHierarchy(type):
         """
         Implements the iteration over the class' instances
         """
-        for cls, cls_set in InstanceReferencingHierarchy.__instances.items():
+        for cls, cls_set in set(InstanceReferencingHierarchy.__instances.items()):
             if issubclass(cls, self):
-                yield from cls_set.values()
+                yield from set(cls_set.values())
     
     def __len__(self) -> int:
         """
         Implements the len of this class (the number of existing instances)
         """
         l = 0
-        for cls, cls_set in InstanceReferencingHierarchy.__instances.items():
+        for cls, cls_set in set(InstanceReferencingHierarchy.__instances.items()):
             if issubclass(cls, self):
                 l += len(cls_set)
         return l
