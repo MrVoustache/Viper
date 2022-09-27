@@ -71,7 +71,7 @@ class Chrono:
         self.__entries : List[Tuple[int, Callable, int, int, bool]] = []         # self.__entries[i] = (time, func, level, TID, in_or_out)
 
     
-    def call(self, func : Callable, *args : Any, **kwargs : Any) -> Any:
+    def call(self, func : Callable[P, R], *args : Any, **kwargs : Any) -> R:
         """
         Calls function with given arguments and measures its execution time.
         Returns what the function returns.
@@ -86,16 +86,12 @@ class Chrono:
         self.__entries.append((self.clock(), func, level, TID, True))
 
         try:
-            res = func(*args, **kwargs)
+            return func(*args, **kwargs)
         except:
+            raise
+        finally:
             self.__level[TID] -= 1
             self.__entries.append((self.clock(), func, level, TID, False))
-            raise
-            
-        self.__level[TID] -= 1
-        self.__entries.append((self.clock(), func, level, TID, False))
-
-        return res
     
 
     def __call__(self, func : Callable[P, R]) -> Callable[P, R]:
@@ -108,13 +104,13 @@ class Chrono:
 
         sig = "@wraps(old_target)\n"
 
-        sig_def, env = signature_def(func, init_env = {"old_target" : func, "self" : self, "wraps" : wraps})
+        sig_def, env = signature_def(func, init_env = {"old_target" : func, "chrono" : self.call, "wraps" : wraps})
         
         code = sig + sig_def
         
         code += "\n\t"
 
-        code += "return self.call(old_target, "
+        code += "return chrono(old_target, "
 
         sig_call = signature_call(func, decorate = False)
 
