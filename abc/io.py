@@ -70,7 +70,7 @@ class BytesIOBase(metaclass = ABCMeta):
         """
         raise NotImplementedError()
     
-    def seek(self, offset : int, whence : int = SEEK_SET, /):
+    def seek(self, offset : int, whence : int = SEEK_SET, /) -> int:
         raise NotImplementedError("Unseekable stream")
     
     seek.__doc__ = """
