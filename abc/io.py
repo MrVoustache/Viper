@@ -50,7 +50,7 @@ class BytesIOBase(metaclass = ABCMeta):
     
     @property
     @abstractmethod
-    def closed(self):
+    def closed(self) -> bool:
         """
         Returns True if the stream has already been closed.
         """
