@@ -69,6 +69,23 @@ class Chrono:
         self.clock = clock
         self.__level : Dict[int, int] = {}
         self.__entries : List[Tuple[int, Callable, int, int, bool]] = []         # self.__entries[i] = (time, func, level, TID, in_or_out)
+        self.__enabled : bool = True
+
+    
+    @property
+    def enabled(self) -> bool:
+        """
+        True if this Chrono is enabled. If not, all timed function calls won't be measured.
+        (It is made to reduce overhead when measures are not required.)
+        """
+        return self.__enabled
+    
+
+    @enabled.setter
+    def enabled(self, value : bool):
+        if not isinstance(value, bool):
+            raise TypeError("Expected bool, got " + repr(type(value).__name__))
+        self.__enabled = value
 
     
     def call(self, func : Callable[P, R], *args : Any, **kwargs : Any) -> R:
@@ -76,6 +93,9 @@ class Chrono:
         Calls function with given arguments and measures its execution time.
         Returns what the function returns.
         """
+        if not self.enabled:
+            return func(*args, **kwargs)
+
         from threading import get_ident
         TID = get_ident()
         if TID not in self.__level:
