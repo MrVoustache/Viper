@@ -239,12 +239,18 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
     print("Per function results :")
     
     for func, executions in report.items():
+        if hasattr(func, "__module__") and hasattr(func, "__name__"):
+            funcname = "'{}.{}'".format(func.__module__, func.__name__)
+        elif hasattr(func, "__module__"):
+            funcname = "'{}.{}'".format(func.__module__, repr(func))
+        else:
+            funcname = "'{}'".format(repr(func))
         subtotal_duration = sum(to_seconds(ex_inf.duration) for ex_inf in executions)
         average_duration = avg(to_seconds(ex_inf.duration) for ex_inf in executions)
         proportion = subtotal_duration / total_duration
         n = len(executions)
 
-        print("Function {:<10s}\n\tCalls : {:<5}, Total : {:^10s}, Average : {:^10s}, Proportion : {:^5s}% of the time".format(repr(func.__name__) if hasattr(func, "__name__") else str(func), str(n), duration(subtotal_duration), duration(average_duration), str(round(proportion * 100, 2))))
+        print("Function {:<10s}\n\tCalls : {:<5}, Total : {:^10s}, Average : {:^10s}, Proportion : {:^5s}% of the time".format(funcname, str(n), duration(subtotal_duration), duration(average_duration), str(round(proportion * 100, 2))))
 
 
 
