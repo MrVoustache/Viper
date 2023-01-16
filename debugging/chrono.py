@@ -6,7 +6,7 @@ This is made to improve the speed of your scripts.
 
 
 from numbers import Complex
-from typing import Any, Callable, Dict, Iterable, List, Optional, ParamSpec, Tuple, TypeVar
+from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, ParamSpec, Tuple, TypeVar
 
 __all__ = ["ExecutionInfo", "Chrono", "print_report"]
 
@@ -143,7 +143,7 @@ class Chrono:
         return env[func.__name__]
     
 
-    def results(self, extensive : bool = False) -> Dict[Callable, List[ExecutionInfo]]:
+    def results(self, *, extensive : bool = False, sort : Literal["name", "calls", "proportion", "speed"] = "name", reversed : bool = False) -> Dict[Callable, List[ExecutionInfo]]:
         """
         Returns the execution times of all function, in the clock unit.
 
@@ -156,11 +156,24 @@ class Chrono:
 
         If extensive is True, when a function passes to another timed function, its own chronometer keeps running.
         Otherwise, the second function's time is subtracted from the first one.
+
+        By default, results are given in alphabetical order of extended function names. Other sorts are available:
+        - "calls" sorts functions by most often called first.
+        - "proportion" sorts functions by most time used first.
+        - "speed" sorts function by speed order, with the fastest functions first.
+        Also, reversed can be set to True to reverse these sorts.
         """
         from typing import Dict, List, Callable, Tuple
 
         if not isinstance(extensive, bool):
-            raise TypeError("Expected bool, got " + repr(extensive.__class__.__name__))
+            raise TypeError("Expected bool for extensive, got " + repr(extensive.__class__.__name__))
+        if not isinstance(sort, str):
+            raise TypeError("Expected str for sort, got " + repr(type(sort).__name__))
+        if sort not in ["name", "calls", "proportion", "speed"]:
+            raise ValueError("Expected any of ('name', 'calls', 'proportion', 'speed') for sort, got " + repr(sort))
+        if not isinstance(reversed, bool):
+            raise TypeError("Exptected bool for reversed, got " + repr(type(reversed).__name__))
+
         res : Dict[Callable, List[ExecutionInfo]] = {}
 
         entries = self.__entries.copy()
@@ -188,7 +201,35 @@ class Chrono:
                     result.level = level
                     result.thread = TID
         
-        return res
+        l = [func for func in res]
+
+        match sort:
+            case "name":
+                def key(func):
+                    if hasattr(func, "__module__") and hasattr(func, "__name__"):
+                        return "'{}.{}'".format(func.__module__, func.__name__)
+                    elif hasattr(func, "__module__"):
+                        return "'{}.{}'".format(func.__module__, repr(func))
+                    else:
+                        return "'{}'".format(repr(func))
+        
+            case "calls":
+                def key(func):
+                    return -len(res[func])
+            
+            case "proportion":
+                def key(func):
+                    executions = res[func]
+                    return -sum(ex_inf.duration for ex_inf in executions)
+                
+            case "speed":
+                def key(func):
+                    executions = res[func]
+                    return -sum(ex_inf.duration for ex_inf in executions) / len(res[func])
+
+        l.sort(key=key, reverse=reversed)
+
+        return {func : res[func] for func in l}
 
 
 
@@ -205,7 +246,7 @@ def __default_conversion(t : int | float) -> float:
         raise TypeError("Unable to automatically convert type '{}' to seconds".format(t.__class__.__name__))
 
 
-def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[Any], float] = __default_conversion):
+def print_report(c : Chrono, *, to_seconds : Callable[[Any], float] = __default_conversion, extensive : bool = False, sort : Literal["name", "calls", "proportion", "speed"] = "name", reversed : bool = False):
     """
     Shows a report featuring the average execution time, number of executions and proportions of all functions.
     If you are using a clock with a custom unit, you should give a function to convert your time values to seconds.
@@ -224,9 +265,16 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
         raise TypeError("Expected a Chrono object, got " + repr(c.__class__.__name__))
     if not isinstance(extensive, bool):
         raise TypeError("Expected bool, got " + repr(extensive.__class__.__name__))
+    if not isinstance(sort, str):
+        raise TypeError("Expected str for sort, got " + repr(type(sort).__name__))
+    if sort not in ["name", "calls", "proportion", "speed"]:
+        raise ValueError("Expected any of ('name', 'calls', 'proportion', 'speed') for sort, got " + repr(sort))
+    if not isinstance(reversed, bool):
+        raise TypeError("Exptected bool for reversed, got " + repr(type(reversed).__name__))
+
     from Viper.format import duration
 
-    report = c.results(extensive)
+    report = c.results(extensive = extensive, sort = sort, reversed = reversed)
     non_extensive_report = c.results()
     N_func = len(report)
     total_duration = sum(sum(to_seconds(ex_inf.duration) for ex_inf in executions) for executions in non_extensive_report.values())
@@ -254,4 +302,4 @@ def print_report(c : Chrono, extensive : bool = False, to_seconds : Callable[[An
 
 
 
-del __default_conversion, Any, Callable, Dict, Iterable, List, Optional, ParamSpec, Tuple, TypeVar, Complex, P, R
+del __default_conversion, Any, Callable, Dict, Iterable, List, Literal, Optional, ParamSpec, Tuple, TypeVar, Complex, P, R
