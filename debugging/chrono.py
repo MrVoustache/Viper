@@ -14,6 +14,42 @@ __all__ = ["ExecutionInfo", "Chrono", "print_report"]
 
 
 
+def funcname(func : Callable) -> str:
+    """
+    Tries to return the fully qualified function name (including module and eventually classes).
+    """
+    import inspect
+
+    mod = inspect.getmodule(func)
+    if mod:
+        mod = mod.__name__ + "."
+    else:
+        mod = ""
+    
+    if hasattr(func, "__name__"):
+        name = func.__name__
+    else:
+        name = repr(func)
+    
+    # You need to make a ChronoWrapper for this to work:
+
+    # class C:
+
+    #     @chrono       -> This will receive an actual function, not a method. The wrapped function will be transformed into a method !!!
+    #     def method(self):
+    #         pass
+
+    # Instead, a ChronoWrapper object should replace the basic wrapper function and it should implement the __set_name__ method!
+
+    # if inspect.ismethod(func) or inspect.ismethoddescriptor(func):
+    #     name = func.__qualname__
+    
+    return mod + name
+
+
+
+
+
 class ExecutionInfo:
 
     """
@@ -206,12 +242,7 @@ class Chrono:
         match sort:
             case "name":
                 def key(func):
-                    if hasattr(func, "__module__") and hasattr(func, "__name__"):
-                        return "'{}.{}'".format(func.__module__, func.__name__)
-                    elif hasattr(func, "__module__"):
-                        return "'{}.{}'".format(func.__module__, repr(func))
-                    else:
-                        return "'{}'".format(repr(func))
+                    return funcname(func)
         
             case "calls":
                 def key(func):
@@ -230,6 +261,7 @@ class Chrono:
         l.sort(key=key, reverse=reversed)
 
         return {func : res[func] for func in l}
+
 
 
 
@@ -287,18 +319,12 @@ def print_report(c : Chrono, *, to_seconds : Callable[[Any], float] = __default_
     print("Per function results :")
     
     for func, executions in report.items():
-        if hasattr(func, "__module__") and hasattr(func, "__name__"):
-            funcname = "'{}.{}'".format(func.__module__, func.__name__)
-        elif hasattr(func, "__module__"):
-            funcname = "'{}.{}'".format(func.__module__, repr(func))
-        else:
-            funcname = "'{}'".format(repr(func))
         subtotal_duration = sum(to_seconds(ex_inf.duration) for ex_inf in executions)
         average_duration = avg(to_seconds(ex_inf.duration) for ex_inf in executions)
         proportion = subtotal_duration / total_duration
         n = len(executions)
 
-        print("Function {:<10s}\n\tCalls : {:<5}, Total : {:^10s}, Average : {:^10s}, Proportion : {:^5s}% of the time".format(funcname, str(n), duration(subtotal_duration), duration(average_duration), str(round(proportion * 100, 2))))
+        print("Function {:<10s}\n\tCalls : {:<5}, Total : {:^10s}, Average : {:^10s}, Proportion : {:^5s}% of the time".format(funcname(func), str(n), duration(subtotal_duration), duration(average_duration), str(round(proportion * 100, 2))))
 
 
 
