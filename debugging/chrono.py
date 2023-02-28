@@ -106,6 +106,10 @@ class Chrono:
         self.__level : Dict[int, int] = {}
         self.__entries : List[Tuple[int, Callable, int, int, bool]] = []         # self.__entries[i] = (time, func, level, TID, in_or_out)
         self.__enabled : bool = True
+        self.__auto_report : bool = False
+        def reporter():
+            print_report(self)
+        self.__reporter = reporter
 
     
     @property
@@ -122,6 +126,26 @@ class Chrono:
         if not isinstance(value, bool):
             raise TypeError("Expected bool, got " + repr(type(value).__name__))
         self.__enabled = value
+    
+
+    @property
+    def auto_report(self) -> bool:
+        """
+        If True, this Chrono will get its report printed before exit of the interpreter automatically.
+        """
+        return self.__auto_report
+
+
+    @auto_report.setter
+    def auto_report(self, value : bool):
+        if not isinstance(value, bool):
+            raise TypeError("Expected bool, got " + repr(type(value).__name__))
+        import atexit
+        if not self.__auto_report and value:
+            atexit.register(self.__reporter)
+        elif self.__auto_report and not value:
+            atexit.unregister(self.__reporter)
+        self.__auto_report = value
 
     
     def call(self, func : Callable[P, R], *args : Any, **kwargs : Any) -> R:
@@ -278,7 +302,7 @@ def __default_conversion(t : int | float) -> float:
         raise TypeError("Unable to automatically convert type '{}' to seconds".format(t.__class__.__name__))
 
 
-def print_report(c : Chrono, *, to_seconds : Callable[[Any], float] = __default_conversion, extensive : bool = False, sort : Literal["name", "calls", "proportion", "speed"] = "name", reversed : bool = False):
+def print_report(c : Chrono, *, to_seconds : Callable[[Any], float] = __default_conversion, extensive : bool = False, sort : Literal["name", "calls", "proportion", "speed"] = "proportion", reversed : bool = False):
     """
     Shows a report featuring the average execution time, number of executions and proportions of all functions.
     If you are using a clock with a custom unit, you should give a function to convert your time values to seconds.
