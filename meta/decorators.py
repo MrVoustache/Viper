@@ -74,9 +74,9 @@ class staticproperty(property, Generic[P, R, T]):
     """
 
     def __init__(self, fget : Callable[[], R] | None = None, fset : Callable[[R], None] | None = None, fdel : Callable[[], None] | None = None) -> None:
-        self.fget = staticmethod(fget) if fget else None
-        self.fset = staticmethod(fset) if fset else None
-        self.fdel = staticmethod(fdel) if fdel else None
+        self.fget : Callable[[], R] | None = staticmethod(fget) if fget else None
+        self.fset : Callable[[R], None] | None = staticmethod(fset) if fset else None
+        self.fdel : Callable[[], None] | None = staticmethod(fdel) if fdel else None
         self.__name__ : str = ""
         self.__cls__ : type = type
     
