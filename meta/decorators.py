@@ -66,7 +66,7 @@ class hybridmethod(Generic[P, R, T]):
 
 
 
-class staticproperty(Generic[P, R, T]):
+class staticproperty(property, Generic[P, R, T]):
 
     """
     This decorator transforms a method into a static property of the class (it takes no self/cls argument).
