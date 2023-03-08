@@ -73,38 +73,66 @@ class staticproperty(property, Generic[P, R, T]):
     You can use setter, getter and deleter to set the different staticproperty descriptors.
     """
 
-    def __init__(self, fget : Callable[[], R] | None = None, fset : Callable[[R], None] | None = None, fdel : Callable[[], None] | None = None) -> None:
-        self.fget : Callable[[], R] | None = staticmethod(fget) if fget else None
-        self.fset : Callable[[R], None] | None = staticmethod(fset) if fset else None
-        self.fdel : Callable[[], None] | None = staticmethod(fdel) if fdel else None
+    def __init__(self, fget : Callable[[], R] | None = None, fset : Callable[[R], None] | None = None, fdel : Callable[[], None] | None = None, *args) -> None:
+        self.__fget : Callable[[], R] | None = None
+        self.__fset : Callable[[R], None] | None = None
+        self.__fdel : Callable[[], None] | None = None
+        # print("Got arguments", (self, fget, fset, fdel) + args)
+        if fget != None:
+            self.__fget = staticmethod(fget)
+        if fset != None:
+            self.__fset = staticmethod(fset)
+        if fdel != None:
+            self.__fdel = staticmethod(fdel)
         self.__name__ : str = ""
         self.__cls__ : type = type
+
+    @property
+    def fget(self) -> Callable[[], R] | None:
+        """
+        The getter function of this staticproperty.
+        """
+        return self.__fget
+    
+    @property
+    def fset(self) -> Callable[[R], None] | None:
+        """
+        The setter function of this staticproperty.
+        """
+        return self.__fset
+    
+    @property
+    def fdel(self) -> Callable[[], None] | None:
+        """
+        The deleter function of this staticproperty.
+        """
+        return self.__fdel
     
     def __set_name__(self, cls : Type[T], name : str):
         self.__name__ = name
         self.__cls__ = cls
     
     def __get__(self, obj : T | None, cls : Type[T] | None = None) -> R:
-        if not self.fget:
+        if not self.__fget:
             raise AttributeError("staticproperty '{}' of '{}' {} has not getter".format(self.__name__, self.__cls__, "object" if obj is not None else "class"))
         try:
-            return self.fget()
+            return self.__fget()
         except AttributeError as e:
             raise e from None
     
     def __set__(self, obj : T | None, value : R):
-        if not self.fset:
+        if not self.__fset:
             raise AttributeError("staticproperty '{}' of '{}' {} has not setter".format(self.__name__, self.__cls__, "object" if obj is not None else "class"))
         try:
-            return self.fset(value)
+            return self.__fset(value)
         except AttributeError as e:
             raise e from None
     
     def __delete__(self, obj : T | None):
-        if not self.fdel:
+        if not self.__fdel:
             raise AttributeError("staticproperty '{}' of '{}' {} has not deleter".format(self.__name__, self.__cls__, "object" if obj is not None else "class"))
         try:
-            return self.fdel()
+            return self.__fdel()
         except AttributeError as e:
             raise e from None
         
@@ -112,25 +140,25 @@ class staticproperty(property, Generic[P, R, T]):
         """
         Descriptor to obtain a copy of the staticproperty with a different getter.
         """
-        self.fget = staticmethod(fget)
+        self.__fget = staticmethod(fget)
         return self
     
     def setter(self, fset : Callable[[R], None]) -> "staticproperty":
         """
         Descriptor to obtain a copy of the staticproperty with a different setter.
         """
-        self.fset = staticmethod(fset)
+        self.__fset = staticmethod(fset)
         return self
     
     def deleter(self, fdel : Callable[[], None]) -> "staticproperty":
         """
         Descriptor to obtain a copy of the staticproperty with a different deleter.
         """
-        self.fdel = staticmethod(fdel)
+        self.__fdel = staticmethod(fdel)
         return self
 
 
 
 
 
-del Callable, Type, TypeVar, ParamSpec, R, P, T
+del Callable, Type, TypeVar, ParamSpec
