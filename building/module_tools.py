@@ -4,6 +4,7 @@ This module contains some tools to clean/modify importation of modules.
 
 
 from typing import Any, Optional
+from types import ModuleType
 
 __all__ = ["replace_module", "get_if_imported", "clean_annotations"]
 
@@ -11,14 +12,13 @@ __all__ = ["replace_module", "get_if_imported", "clean_annotations"]
 
 
 
-
-def replace_module(name : str, value : Any) -> None:
+def replace_module(name : str, value : Any):
     """
     Replaces the module with given name by value.
-    Warning : this is permanent during the lifetime of this interpreter.
+    Warning : this is permanent during the lifetime of this interpreter or until the given module gets forcefully reloaded.
     For example, a module which only contains a class with the same name might be replaced by the class itself.
     """
-    if name.__class__ != str:
+    if not isinstance(name, str):
         raise TypeError("Name must be a str, got "+repr(name.__class__.__name__))
     import sys
     if name not in sys.modules:
@@ -26,19 +26,16 @@ def replace_module(name : str, value : Any) -> None:
     sys.modules[name] = value
 
 
-def get_if_imported(module : str, value : Optional[str] = None) -> Any:
+def get_if_imported(module : str) -> ModuleType:
     """
-    Returns the module or object in the module if it has been loaded.
+    Returns the module if it has been loaded.
     Raises ModuleNotFoundError otherwise.
     """
-    if module.__class__ != str or (value != None and value.__class__ != str):
-        raise TypeError("Expected str, str or None, got "+repr(module.__class__.__name__)+" and "+repr(value.__class__.__name__))
+    if module.__class__ != str:
+        raise TypeError("Expected str, got "+repr(module.__class__.__name__))
     import sys
     if module in sys.modules:
-        m = sys.modules[module]
-        if value != None and value in dir(m):
-            return getattr(m, value)
-        return m
+        return sys.modules[module]
     raise ModuleNotFoundError("Module '{}' has not been imported yet".format(module))
 
 
@@ -57,7 +54,7 @@ def clean_annotations(*clss : type) -> None:
     >>> print(Foo.new.__annotations__)
     {'return': <class '__main__.Foo'>}
 
-    When given multiple classes, it will also clean them globally (cleaning the appearances of each class into each other).
+    When given multiple classes, it will also clean them globally (cleaning the occurences of each class into each other).
     """
     for cls in clss:
         if not isinstance(cls, type):
@@ -92,4 +89,6 @@ def clean_annotations(*clss : type) -> None:
 
 
 
-del Any, Optional
+
+
+del Any, Optional, ModuleType

@@ -6,7 +6,8 @@ This is made to improve the speed of your scripts.
 
 
 from numbers import Complex
-from typing import Any, Callable, Dict, Iterable, List, Literal, Optional, ParamSpec, Tuple, TypeVar
+from typing import Any, Callable, Generic, Iterable, Literal, Optional, ParamSpec, TypeVar
+from time import process_time_ns
 
 __all__ = ["ExecutionInfo", "Chrono", "print_report"]
 
@@ -50,10 +51,12 @@ def funcname(func : Callable) -> str:
 
 
 
-class ExecutionInfo:
+Time = TypeVar("Time", bound = complex | float | int | bool)
+
+class ExecutionInfo(Generic[Time]):
 
     """
-    A class that holds the information about a specific run of a function.
+    An object that holds the information about a specific run of a function.
     """
 
     __slots__ = {
@@ -64,14 +67,14 @@ class ExecutionInfo:
     }
 
     def __init__(self) -> None:
-        self.function = None
-        self.duration = 0
-        self.thread = 0
-        self.level = 0
+        self.function : Callable | None = None
+        self.duration : Time | int = 0
+        self.thread : int = 0
+        self.level : int = 0
 
-    
     def __str__(self) -> str:
-        return "[Function {} lasted {} units of time in thread #{} at level {}]".format(self.function.__name__, self.duration, self.thread, self.level)
+        return "[Function {} lasted {} units of time in thread #{} at level {}]".format(self.function.__name__ if self.function else "None", self.duration, self.thread, self.level)
+
 
 
 
@@ -79,7 +82,7 @@ class ExecutionInfo:
 P = ParamSpec("P")
 R = TypeVar("R")
 
-class Chrono:
+class Chrono(Generic[Time]):
 
     """
     A chronometer class. Allows to measure execution time of multiple functions in a program (even at multiple levels).
@@ -89,12 +92,9 @@ class Chrono:
     Careful : the default clock is process_time_ns (that measures CPU time for this process only). For example, using sleep won't make time pass.
     """
 
-    def __init__(self, clock : Optional[Callable[[], Any]] = None) -> None:
+    def __init__(self, clock : Callable[[], Time] = process_time_ns) -> None:
         from typing import Dict, List, Tuple, Callable
 
-        if clock == None:
-            from time import process_time_ns
-            clock = process_time_ns
         if not callable(clock):
             raise TypeError("Expected callable, got " + repr(clock.__class__.__name__))
         try:
@@ -104,7 +104,7 @@ class Chrono:
         
         self.clock = clock
         self.__level : Dict[int, int] = {}
-        self.__entries : List[Tuple[int, Callable, int, int, bool]] = []         # self.__entries[i] = (time, func, level, TID, in_or_out)
+        self.__entries : List[Tuple[Time, Callable, int, int, bool]] = []         # self.__entries[i] = (time, func, level, TID, in_or_out)
         self.__enabled : bool = True
         self.__auto_report : bool = False
         def reporter():
@@ -148,12 +148,12 @@ class Chrono:
         self.__auto_report = value
 
     
-    def call(self, func : Callable[P, R], *args : Any, **kwargs : Any) -> R:
+    def call(self, func : Callable[P, R], *args : P.args, **kwargs : P.kwargs) -> R:
         """
         Calls function with given arguments and measures its execution time.
         Returns what the function returns.
         """
-        if not self.enabled:
+        if not self.__enabled:
             return func(*args, **kwargs)
 
         from threading import get_ident
@@ -203,7 +203,7 @@ class Chrono:
         return env[func.__name__]
     
 
-    def results(self, *, extensive : bool = False, sort : Literal["name", "calls", "proportion", "speed"] = "name", reversed : bool = False) -> Dict[Callable, List[ExecutionInfo]]:
+    def results(self, *, extensive : bool = False, sort : Literal["name", "calls", "proportion", "speed"] = "name", reversed : bool = False) -> dict[Callable, list[ExecutionInfo]]:
         """
         Returns the execution times of all function, in the clock unit.
 
@@ -223,8 +223,6 @@ class Chrono:
         - "speed" sorts function by speed order, with the fastest functions first.
         Also, reversed can be set to True to reverse these sorts.
         """
-        from typing import Dict, List, Callable, Tuple
-
         if not isinstance(extensive, bool):
             raise TypeError("Expected bool for extensive, got " + repr(extensive.__class__.__name__))
         if not isinstance(sort, str):
@@ -234,13 +232,13 @@ class Chrono:
         if not isinstance(reversed, bool):
             raise TypeError("Exptected bool for reversed, got " + repr(type(reversed).__name__))
 
-        res : Dict[Callable, List[ExecutionInfo]] = {}
+        res : dict[Callable, list[ExecutionInfo]] = {}
 
         entries = self.__entries.copy()
         TIDs = {TID for time, func, level, TID, entry in entries}
         for TID in TIDs:
-            calls : List[Tuple[Callable, int]] = []
-            last_durations = [0]
+            calls : list[tuple[Callable, Time]] = []
+            last_durations : list[Time] = [0]
             for time, func, level, TID, entry in filter(lambda x : x[3] == TID, entries):
                 if entry:
                     calls.append((func, time))
@@ -263,24 +261,32 @@ class Chrono:
         
         l = [func for func in res]
 
+        def key_name(func):
+            return funcname(func)
+        
+        def key_calls(func):
+            return -len(res[func])
+    
+        def key_proportion(func):
+            executions = res[func]
+            return -sum(ex_inf.duration for ex_inf in executions)
+        
+        def key_speed(func):
+            executions = res[func]
+            return -sum(ex_inf.duration for ex_inf in executions) / len(res[func])
+
         match sort:
             case "name":
-                def key(func):
-                    return funcname(func)
+                key = key_name
         
             case "calls":
-                def key(func):
-                    return -len(res[func])
+                key = key_calls
             
             case "proportion":
-                def key(func):
-                    executions = res[func]
-                    return -sum(ex_inf.duration for ex_inf in executions)
+                key = key_proportion
                 
             case "speed":
-                def key(func):
-                    executions = res[func]
-                    return -sum(ex_inf.duration for ex_inf in executions) / len(res[func])
+                key = key_speed
 
         l.sort(key=key, reverse=reversed)
 
@@ -309,9 +315,8 @@ def print_report(c : Chrono, *, to_seconds : Callable[[Any], float] = __default_
     If you are using a second (float) or nanosecond (int) clock the conversion is automatic.
     """
     from typing import Iterable
-    from numbers import Complex
 
-    def avg(it : Iterable[Complex]) -> Complex:
+    def avg(it : Iterable[int | float]) -> int | float:
         l = list(it)
         if not l:
             raise ValueError("Average of zero values")
@@ -352,4 +357,4 @@ def print_report(c : Chrono, *, to_seconds : Callable[[Any], float] = __default_
 
 
 
-del __default_conversion, Any, Callable, Dict, Iterable, List, Literal, Optional, ParamSpec, Tuple, TypeVar, Complex, P, R
+del __default_conversion, Any, Callable, Iterable, Literal, Optional, ParamSpec, TypeVar, Complex, P, R, process_time_ns

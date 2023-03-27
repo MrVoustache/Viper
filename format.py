@@ -8,7 +8,7 @@ __all__ = ["byte_size", "bit_size", "duration"]
 
 
 
-def byte_size(num : int) -> str:
+def byte_size(num : int | float) -> str:
     """
     Returns a string representing the approximated number in adapted order of bytes magnitude.
     """
@@ -19,7 +19,7 @@ def byte_size(num : int) -> str:
     return "%.2f%s%s" % (num, 'Y', "B")
 
 
-def bit_size(num : int) -> str:
+def bit_size(num : int | float) -> str:
     """
     Returns a string representing the approximated number in adapted order of bits magnitude.
     """

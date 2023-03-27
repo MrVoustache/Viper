@@ -1,5 +1,5 @@
 """
-This module adds new classes of threads, including one for deamonic threads, but also fallen threads.
+This module adds new classes of threads, including one for deamonic threads, but also fallen threads and useful multithreading tools.
 """
 
 
@@ -24,27 +24,70 @@ class Future(Event, Generic[T]):
     You can wait for it like an event.
     """
 
+    def __init__(self) -> None:
+        from threading import Lock, Event
+        super().__init__()
+        self.__value : "T" | None = None
+        self.__exception : BaseException | None = None
+        self.__lock = Lock()
+        self.__waiting : int = 0
+        self.__collapsed = Event()
+        self.__collapsed.set()
+
     def set(self, value : T) -> None:
         """
         Sets the value of the Future.
         """
-        self.__value = value
-        self.__ok = True
-        return super().set()
+        with self.__lock:
+            self.__value = value
+            if self.__waiting:
+                self.__collapsed.clear()
+            return super().set()
     
     def set_exception(self, exc : BaseException) -> None:
         """
-        Sets the future to raise an exception
+        Makes the Future raise an exception.
         """
-        self.__value = exc
-        self.__ok = False
+        if not isinstance(exc, BaseException):
+            raise TypeError("Expected BaseException, got " + repr(type(exc).__name__))
+        with self.__lock:
+            self.__exception = exc
+            if self.__waiting:
+                self.__collapsed.clear()
+            return super().set()
     
     def clear(self) -> None:
         """
-        Clears the Future. Removes the associated value.
+        Clears the Future. Removes the associated value and exception.
         """
-        self.__value = None     # Do not hold references to unknown objects
-        return super().clear()
+        if not self.__collapsed.is_set():
+            self.__collapsed.wait()
+        with self.__lock:
+            if not self.is_set():
+                return
+            if not self.__waiting:
+                self.__value = None     # Do not hold references to unknown objects
+                self.__exception = None
+                return super().clear()
+    
+    def wait(self, timeout : float = float("inf")) -> bool:
+        try:
+            timeout = float(timeout)
+        except:
+            pass
+        if not isinstance(timeout, float):
+            raise TypeError("Expected float for timeout, got " + repr(type(timeout).__name__))
+        if timeout < 0 or timeout == float("nan"):
+            raise ValueError("Expected positive timeout, got " + repr(timeout))
+        try:
+            with self.__lock:
+                self.__waiting += 1
+            return super().wait(timeout if timeout != float("inf") else None)
+        finally:
+            with self.__lock:
+                self.__waiting -= 1
+                if not self.__waiting:
+                    self.__collapsed.set()
     
     def result(self, timeout : float = float("inf")) -> T:
         """
@@ -59,13 +102,24 @@ class Future(Event, Generic[T]):
             raise TypeError("Expected float for timeout, got " + repr(type(timeout).__name__))
         if timeout < 0 or timeout == float("nan"):
             raise ValueError("Expected positive timeout, got " + repr(timeout))
-        ok = self.wait(timeout if timeout != float("inf") else None)
-        if not ok:
-            raise TimeoutError("Future has not been resolved yet")
-        if self.__ok:
-            return self.__value
-        else:
-            raise self.__value from None
+        self.__collapsed.wait()
+        try:
+            with self.__lock:
+                self.__waiting += 1
+            ok = self.wait(timeout)
+            if not ok:
+                raise TimeoutError("Future has not been resolved yet")
+            if not self.__exception:
+                return self.__value
+            else:
+                raise self.__exception from None
+        finally:
+            with self.__lock:
+                self.__waiting -= 1
+                if not self.__waiting:
+                    self.__collapsed.set()
+
+
 
 
 
@@ -218,14 +272,13 @@ class DeamonPoolExecutor(ThreadPoolExecutor):
 
 
 
-
-
 P = ParamSpec("P")
 T = TypeVar("T")
-class ExclusionGroup(type(RLock())):
+
+class ExclusionGroup:
 
     """
-    This is used to create a mutual exclusion group. It is just an RLock that can be used as a decorator to make a function mutually exclusive in regards to anyone using this same RLock.
+    This is used to create a mutual exclusion group. It is like using a RLock but that can be used as a decorator to make a function mutually exclusive in regards to anyone using this same function.
     """
 
     def __call__(self, f : Callable[P, T]) -> Callable[P, T]:
@@ -251,11 +304,15 @@ class ExclusionGroup(type(RLock())):
         return env[f.__name__]
 
 
+
+
+
 def exclusive(f : Callable):
 
     return ExclusionGroup()(f)
     
 critical = exclusive
+
 
 
     

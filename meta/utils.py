@@ -85,6 +85,7 @@ def signature_def(f : Callable, *, init_env : dict[str, Any] | None = None) -> t
 
     return abstract_sig, init_env
 
+
 def signature_call(f : Callable, param_arg_mapping : dict[str, str | None] | None = None, *, decorate : bool = True) -> str:
     """
     Creates a one line string that represents a call to given function (with its complete signature) that allows you to execute this function call.
@@ -142,7 +143,6 @@ def signature_call(f : Callable, param_arg_mapping : dict[str, str | None] | Non
         call += ")"
 
     return call
-
 
 
 def merge(*types : type) -> type:

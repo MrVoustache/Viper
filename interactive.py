@@ -12,6 +12,10 @@ __all__ = ["InteractiveInterpreter"]
 
 class InteractiveInterpreter:
 
+    """
+    This is an interactive interpreter that will mimic the external interpreter.
+    """
+
     def __init__(self, env : dict[str, Any] | None = None) -> None:
         if env is None:
             env = {}
@@ -63,6 +67,9 @@ class InteractiveInterpreter:
                 del sys.ps2
             else:
                 sys.ps2 = old_ps2
+
+
+
 
 
 del Any

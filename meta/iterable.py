@@ -3,7 +3,7 @@ This module adds metaclasses that make classes iterable, yielding all of their i
 """
 
 
-from typing import Any, Iterator, Sequence, TypeVar
+from typing import Any, Iterator, Sequence, TypeVar, Type
 from weakref import WeakSet, WeakValueDictionary
 
 __all__ = ["InstanceReferencingClass", "InstancePreservingClass", "InstanceReferencingHierarchy", "InstancePreservingHierarchy"]
@@ -12,7 +12,7 @@ __all__ = ["InstanceReferencingClass", "InstancePreservingClass", "InstanceRefer
 
 
 
-CLS = TypeVar("CLS")
+T = TypeVar("T")
 
 class InstanceReferencingClass(type):
 
@@ -42,21 +42,22 @@ class InstanceReferencingClass(type):
     1
     """
 
-    def __new__(cls : type[CLS], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls : Type["InstanceReferencingClass"], name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """
         from .utils import signature_def, signature_call
+        from typing import Iterable
         from functools import wraps
         from weakref import WeakValueDictionary
 
         s = WeakValueDictionary()
         
         def extract_slots(o : type) -> set[str]:
-            if not hasattr(o, "__slots__"):
-                s = set()
+            if hasattr(o, "__slots__") and isinstance(o.__slots__, Iterable):   # type: ignore
+                s = set(o.__slots__)                                            # type: ignore
             else:
-                s = set(o.__slots__)
+                s = set()
             return s.union(*[extract_slots(b) for b in o.__bases__])
 
         added = False
@@ -112,7 +113,7 @@ class InstanceReferencingClass(type):
         cls.__instances = s
         return cls
     
-    def __iter__(self) -> Iterator[CLS]:
+    def __iter__(self : Type[T]) -> Iterator[T]:
         """
         Implements the iteration over the class' instances
         """
@@ -155,7 +156,7 @@ class InstancePreservingClass(type):
     2
     """
 
-    def __new__(cls : type[CLS], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls : type["InstancePreservingClass"], name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """
@@ -222,7 +223,7 @@ class InstancePreservingClass(type):
         cls.__instances = s
         return cls
     
-    def __iter__(self) -> Iterator[CLS]:
+    def __iter__(self : type[T]) -> Iterator[T]:
         """
         Implements the iteration over the class' instances
         """
@@ -266,9 +267,9 @@ class InstanceReferencingHierarchy(type):
     [<__main__.A object at 0x000001C607E309A0>, <__main__.A object at 0x000001C607E309D0>]
     """
 
-    __instances : dict[type[CLS], WeakValueDictionary[int, CLS]] = {}
+    __instances : dict[type[T], WeakValueDictionary[int, T]] = {}
 
-    def __new__(cls : type[CLS], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls : type["InstanceReferencingHierarchy"], name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """            
@@ -338,7 +339,7 @@ class InstanceReferencingHierarchy(type):
         InstanceReferencingHierarchy.__instances[cls] = s
         return cls
 
-    def __iter__(self) -> Iterator[CLS]:
+    def __iter__(self : type[T]) -> Iterator[T]:
         """
         Implements the iteration over the class' instances
         """
@@ -389,9 +390,9 @@ class InstancePreservingHierarchy(type):
     [<__main__.B object at 0x000001C607E30A00>, <__main__.A object at 0x000001C607E309A0>, <__main__.A object at 0x000001C607E309D0>]
     """
 
-    __instances : dict[type[CLS], list[CLS]] = {}
+    __instances : dict[type[T], list[T]] = {}
 
-    def __new__(cls : type[CLS], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls : type["InstancePreservingHierarchy"], name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """
@@ -458,7 +459,7 @@ class InstancePreservingHierarchy(type):
         InstancePreservingHierarchy.__instances[cls] = s
         return cls
     
-    def __iter__(self) -> Iterator[CLS]:
+    def __iter__(self : type[T]) -> Iterator[T]:
         """
         Implements the iteration over the class' instances
         """
@@ -480,4 +481,4 @@ class InstancePreservingHierarchy(type):
 
     
 
-del Any, Iterator, Sequence, TypeVar, CLS, WeakSet
+del Any, Iterator, Sequence, TypeVar, T, WeakSet

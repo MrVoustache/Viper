@@ -30,8 +30,8 @@ class semistaticmethod(Generic[P, R, T]):
         def semi(*args : P.args, **kwargs : P.kwargs):      # type: ignore
             return self.__func__(obj, *args, **kwargs)      # type: ignore
 
-        semi.__func__ = semi.im_func = self.__func__
-        semi.__self__ = semi.im_self = obj
+        semi.__func__ = semi.im_func = self.__func__        # type: ignore
+        semi.__self__ = semi.im_self = obj                  # type: ignore
 
         return semi                                         # type: ignore
 
@@ -57,8 +57,8 @@ class hybridmethod(Generic[P, R, T]):
         def hybrid(*args : P.args, **kwargs : P.kwargs):        # type: ignore
             return self.__func__(context, *args, **kwargs)      # type: ignore
 
-        hybrid.__func__ = hybrid.im_func = self.__func__
-        hybrid.__self__ = hybrid.im_self = context
+        hybrid.__func__ = hybrid.im_func = self.__func__        # type: ignore
+        hybrid.__self__ = hybrid.im_self = context              # type: ignore
 
         return hybrid                                           # type: ignore
     

@@ -5,9 +5,13 @@ This module adds a few methods and classes that make using pickle easier and mor
 from Viper.abc.io import BytesReader, BytesWriter
 from Viper.abc.flux import FluxOperator
 from pickle import Unpickler, UnpicklingError
+from pickle import load as _old_load
+from pickle import loads as _old_loads
+import pickle
 from typing import Any, Dict, Iterable, Iterator
 from Viper.warnings import VulnerabilityWarning
 from Viper.better_threading import Future
+from functools import wraps
 
 __all__ = ["PickleVulnerabilityWarning", "ForbiddenPickleError", "WhiteListUnpickler", "BlackListUnpickler", "safe_load", "safe_loads", "DumpOperator", "UnsecureLoadOperator", "SafeLoadOperator"]
 
@@ -25,11 +29,40 @@ class PickleVulnerabilityWarning(VulnerabilityWarning):
 
 
 
+
 class ForbiddenPickleError(UnpicklingError):
 
     """
     This exception indicates that an unpickling operation was attempted on a pickle that is forbidden in the present context.
     """
+
+
+
+
+
+@wraps(_old_load)
+def load(*args, **kwargs) -> Any:
+    from warnings import warn
+    warn(PickleVulnerabilityWarning("Using pickle.load without further protection."))
+    try:
+        return _old_load(*args, **kwargs)
+    except BaseException as e:
+        raise e from None
+
+pickle.load = load
+
+
+@wraps(_old_loads)
+def loads(*args, **kwargs) -> Any:
+    from warnings import warn
+    warn(PickleVulnerabilityWarning("Using pickle.loads without further protection."))
+    try:
+        return _old_loads(*args, **kwargs)
+    except BaseException as e:
+        raise e from None
+
+pickle.loads = loads
+
 
 
 
@@ -93,7 +126,7 @@ class WhiteListUnpickler(Unpickler):
         """
         Iterates over all of the allowed objects.
         """
-        return self._wlist.values()
+        return iter(self._wlist.values())
 
     def find_class(self, __module_name: str, __global_name: str) -> Any:
         if (__module_name, __global_name) not in self._wlist:
@@ -102,6 +135,7 @@ class WhiteListUnpickler(Unpickler):
         if obj != self._wlist[(__module_name, __global_name)]:
             raise ForbiddenPickleError("Cannot import object '{}' from module '{}' as it is not on the unpickler's whitelist.".format(__global_name, __module_name))
         return obj
+
 
 
 
@@ -165,7 +199,7 @@ class BlackListUnpickler(Unpickler):
         """
         Iterates over all of the forbidden objects.
         """
-        return self._blist.values()
+        return iter(self._blist.values())
 
     def find_class(self, __module_name: str, __global_name: str) -> Any:
         if (__module_name, __global_name) in self._blist:
@@ -193,6 +227,7 @@ def safe_loads(data : bytes | bytearray | memoryview) -> Any:
     unpickler.allow(*safe_builtins)
     return unpickler.load()
 
+
 def safe_load(file : BytesReader) -> Any:
     """
     Loads pickle from given file using only safe builtins.
@@ -206,6 +241,7 @@ def safe_load(file : BytesReader) -> Any:
     unpickler = WhiteListUnpickler(file)
     unpickler.allow(*safe_builtins)
     return unpickler.load()
+
 
 
 
@@ -267,6 +303,7 @@ class DumpOperator(FluxOperator):
 
 
 
+
 class UnsecureLoadOperator(FluxOperator):
 
     """
@@ -317,6 +354,7 @@ class UnsecureLoadOperator(FluxOperator):
     @property
     def finished(self) -> bool:
         return self.__done
+
 
 
 
@@ -375,4 +413,6 @@ class SafeLoadOperator(UnsecureLoadOperator):
 
 
 
-del BytesReader, Unpickler, UnpicklingError, Any, Dict, Iterable, Iterator, VulnerabilityWarning, Future
+
+
+del BytesReader, Unpickler, UnpicklingError, Any, Dict, Iterable, Iterator, VulnerabilityWarning, Future, pickle

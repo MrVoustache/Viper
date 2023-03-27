@@ -3,7 +3,7 @@ This module defines a flux operator.
 """
 
 from abc import abstractmethod
-from typing import Any, Optional, Type
+from typing import Optional
 from Viper.abc.io import BytesReader, BytesWriter
 
 __all__ = ["FluxOperator"]
@@ -22,7 +22,7 @@ class FluxOperator:
     If some additional information is required, the initialize() method should take care of that.
     """
 
-    inverse : Optional["FluxOperator"] = None
+    inverse : Optional[type["FluxOperator"]] = None
 
     def __init__(self, source : BytesReader, destination : BytesWriter, *, auto_close : bool = False) -> None:
         from .io import BytesReader, BytesWriter
@@ -76,6 +76,8 @@ class FluxOperator:
         True if the stream operation is finished, i.e. if the input stream has been closed and the last operation has been written to the output stream.
         """
         raise NotImplementedError()   
+
+
 
 
 

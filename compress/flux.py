@@ -51,6 +51,7 @@ class BZ2CompressorOperator(FluxOperator):
 
 
 
+
 class BZ2DecompressorOperator(FluxOperator):
 
     """
@@ -85,6 +86,7 @@ class BZ2DecompressorOperator(FluxOperator):
 
 BZ2CompressorOperator.inverse = BZ2DecompressorOperator
 BZ2DecompressorOperator.inverse = BZ2CompressorOperator
+
 
 
 
@@ -127,6 +129,7 @@ class LZMACompressorOperator(FluxOperator):
 
 
 
+
 class LZMADecompressorOperator(FluxOperator):
 
     """
@@ -161,6 +164,7 @@ class LZMADecompressorOperator(FluxOperator):
 
 LZMACompressorOperator.inverse = LZMADecompressorOperator
 LZMADecompressorOperator.inverse = LZMACompressorOperator
+
 
 
 
@@ -208,6 +212,7 @@ if ok:
         @property
         def finished(self) -> bool:
             return self.__done
+
 
 
 

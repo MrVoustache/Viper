@@ -21,6 +21,7 @@ class IOClosedError(Exception):
 
 
 
+
 class BytesIOBase(metaclass = ABCMeta):
 
     """
@@ -71,15 +72,21 @@ class BytesIOBase(metaclass = ABCMeta):
         raise NotImplementedError()
     
     def seek(self, offset : int, whence : int = SEEK_SET, /) -> int:
+        """
+        Seeks a position in stream. Position is calculated by adding offset to the reference point given by whence.
+        - If whence = SEEK_SET = 0, seeks from the start of the stream. Offset should then be positive or zero.
+        - If whence = SEET_CUR = 1, seeks from the current of the stream. Offset can be of any sign.
+        - If whence = SEEK_END = 2, seeks from the end of the stream. Offset should be negative.
+        """
         raise NotImplementedError("Unseekable stream")
     
-    seek.__doc__ = """
+    seek.__doc__ = f"""
         Seeks a position in stream. Position is calculated by adding offset to the reference point given by whence.
-        - If whence = SEEK_SET = {}, seeks from the start of the stream. Offset should then be positive or zero.
-        - If whence = SEET_CUR = {}, seeks from the current of the stream. Offset can be of any sign.
-        - If whence = SEEK_END = {}, seeks from the end of the stream. Offset should be negative.
-        """.format(SEEK_SET, SEEK_CUR, SEEK_END)
-    
+        - If whence = SEEK_SET = {SEEK_SET}, seeks from the start of the stream. Offset should then be positive or zero.
+        - If whence = SEET_CUR = {SEEK_CUR}, seeks from the current of the stream. Offset can be of any sign.
+        - If whence = SEEK_END = {SEEK_END}, seeks from the end of the stream. Offset should be negative.
+        """
+        
     @abstractmethod
     def readable(self) -> bool:
         """
@@ -99,6 +106,7 @@ class BytesIOBase(metaclass = ABCMeta):
         Implements destruction of self. Closes stream by default.
         """
         self.close()
+
 
 
 
@@ -187,6 +195,7 @@ class BytesReader(BytesIOBase):
 
 
 
+
 class BytesWriter(BytesIOBase):
     
     """
@@ -263,6 +272,7 @@ class BytesWriter(BytesIOBase):
 
 
 
+
 class BytesIO(BytesReader, BytesWriter):
 
     """
@@ -274,6 +284,8 @@ class BytesIO(BytesReader, BytesWriter):
     
     def writable(self) -> bool:
         return True
+
+
 
 
 

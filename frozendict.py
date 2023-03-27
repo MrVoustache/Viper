@@ -8,14 +8,19 @@ Careful : This module actually gets erased by the frozendict class:
 """
 
 
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, TypeVar
 from Viper.building.module_tools import clean_annotations, replace_module
 
+__all__ = ["frozendict"]
 
 
 
 
-class frozendict(dict):
+
+K = TypeVar("K")
+V = TypeVar("V")
+
+class frozendict(dict[K, V]):
 
     """
     A frozendict class. They are to dictionaries what frozensets are to sets.
@@ -27,13 +32,13 @@ class frozendict(dict):
         "__hash" : "The hash of the frozendict"
     }
 
-    def __delitem__(self, v):
+    def __delitem__(self, v : V):
         raise TypeError("'frozendict' object doesn't support item deletion")
 
-    def __ior__(self, __value):
+    def __ior__(self, __value : Mapping[K, V]):
         return NotImplemented
 
-    def __setitem__(self, k, v):
+    def __setitem__(self, k : K, v : V):
         raise TypeError("'frozendict' object does not support item assignment")
 
     def clear(self):
@@ -42,16 +47,16 @@ class frozendict(dict):
     def copy(self):
         return frozendict(super().copy())
     
-    def pop(self, k):
+    def pop(self, k : K) -> V:
         raise AttributeError("'frozendict' object has no attribute 'pop'")
     
-    def popitem(self):
+    def popitem(self) -> tuple[K, V]:
         raise AttributeError("'frozendict' object has no attribute 'popitem'")
     
-    def setdefault(self, __key, __default):
+    def setdefault(self, __key : K, __default : V):
         raise AttributeError("'frozendict' object has no attribute 'setdefault'")
     
-    def update(self, iterable):
+    def update(self, iterable : Mapping[K, V]):
         raise AttributeError("'frozendict' object has no attribute 'update'")
     
     def __hash__(self) -> int:
@@ -69,16 +74,22 @@ class frozendict(dict):
     def __str__(self) -> str:
         return "frozendict(" + super().__str__() + ")"
 
-    def __or__(self, __value: Mapping) -> "frozendict":
+    def __or__(self, __value: Mapping[K, V]) -> "frozendict[K, V]":
         return frozendict(super().__or__(__value))
     
-    def __ror__(self, __value: Mapping) -> "frozendict":
+    def __ror__(self, __value: Mapping[K, V]) -> "frozendict[K, V]":
         return frozendict(super().__ror__(__value))
     
-    def fromkeys(iterable : Iterable, value : Any = None) -> "frozendict":
+    @staticmethod
+    def fromkeys(iterable : Iterable[K], value : V | None = None) -> "frozendict[K, V | None]":
         return frozendict(super().fromkeys(iterable, value))
 
 
 clean_annotations(frozendict)
 replace_module("Viper.frozendict", frozendict)
-del clean_annotations, replace_module, Any, Iterable, Mapping
+
+
+
+
+
+del clean_annotations, replace_module, Any, Iterable, Mapping, TypeVar, K, V

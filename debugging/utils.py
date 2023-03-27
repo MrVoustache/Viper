@@ -24,36 +24,34 @@ class TimedPrint:
 
     def __init__(self, delay : float = 5.0) -> None:
         from time import time_ns
-        self._timer = time_ns
-        self._t = time_ns()
+        self.__timer = time_ns
+        self.__t = time_ns()
         self.set(delay)
     
-
     def __call__(self, *args: Any, **kwargs : Any) -> None:
-        if (self._timer() - self._t) > self._delay:
-            print(*args, **kwargs)
-            self._t = self._timer()
+        if (self.__timer() - self.__t) > self.__delay:
+            self.__t = self.__timer()
     
-
     def reset(self):
         """
         Sets timer to 0 (as if something just had been printed).
         """
-        self._t = self._timer()
-
+        self.__t = self.__timer()
 
     def clear(self):
         """
         Clears timer (as if the last print was long ago enough).
         """
-        self._t = self._timer() - 2 * self._delay
+        self.__t = self.__timer() - 2 * self.__delay
     
-
     def set(self, delay : float):
         """
         Sets the minimum delay to given value (in seconds).
         """
-        self._delay = round(delay * 1000000000)
+        self.__delay = round(delay * 1000000000)
+
+
+
 
 
 del Any

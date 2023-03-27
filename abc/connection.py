@@ -18,11 +18,14 @@ class BufferTooSmall(Exception):
 
 
 
+
+
 class ConnectionClosedError(ConnectionError):
 
     """
     This exception is raised when an operation is attempted on a closed connection object.
     """
+
 
 
 
@@ -60,10 +63,8 @@ class Address(metaclass = ABCMeta):
         Returns the address associated to the given interger. Get such an integer by calling add.to_int() on an Address object.
         NOTE : By default, this method is not secure! At least re-implement it.
         """
-        from pickle import loads
         from Viper.pickle_utils import PickleVulnerabilityWarning
-        from warnings import warn
-        warn(PickleVulnerabilityWarning("The basic implementation of Address.from_int uses pickle blindly to load the pickle of your object."))
+        from pickle import loads
         return loads(i.to_bytes((i.bit_length() + 7) // 8, "little")[1:-1])
 
     @abstractmethod
@@ -137,6 +138,7 @@ class ConnectionBase(metaclass = ABCMeta):
 
 
 
+
 class Sender(ConnectionBase):
     
     """
@@ -159,6 +161,7 @@ class Sender(ConnectionBase):
         Asynchronous version of send.
         """
         raise NotImplementedError()
+
 
 
 
@@ -233,11 +236,14 @@ class Receiver(ConnectionBase):
 
 
 
+
 class Connection(Sender, Receiver):
 
     """
     This class describes the interface of a bidirectional connection.
     """
+
+
 
 
 
