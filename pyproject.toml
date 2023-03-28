@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "Viper"
+name = "viper_lib"
 version = "0.5"
 authors = [
   { name="Vincent Raulin", email="vincent.raulin.n7@gmail.com" },
 ]
 description = "A Python library full of useful Python tools."
-readme = "README.md"
-license = {file = "LICENSE"}
+readme = "Viper/README.md"
+license = {file = "Viper/LICENSE"}
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
