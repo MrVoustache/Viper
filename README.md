@@ -9,6 +9,7 @@ To list all of the available packages, simply Python's interactive prompt and ex
 
 ```
 >>> from Viper import *
+>>> dir()
 ['__annotations__', '__builtins__', '__doc__', '__loader__', '__name__', '__package__', '__spec__', 'abc', 'better_threading', 'building', 'compress', 'debugging', 'exceptions', 'format', 'frozendict', 'interactive', 'meta', 'pickle_utils', 'warnings']
 >>> help(better_threading)
 Help on module Viper.better_threading in Viper:
