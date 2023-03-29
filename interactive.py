@@ -43,8 +43,6 @@ class InteractiveInterpreter:
             raise TypeError("Expected str or None, str or None, got " + repr(type(banner).__name__) + " and " + repr(type(exit_message).__name__))
 
         import code
-        import readline
-        import rlcompleter
         import os
         import sys
 
@@ -55,8 +53,13 @@ class InteractiveInterpreter:
             if filename:
                 exec(open(filename, "r").read(), {})
 
-            readline.set_completer(rlcompleter.Completer(self.__env).complete)
-            readline.parse_and_bind("tab: complete")
+            try:
+                import readline
+                import rlcompleter
+                readline.set_completer(rlcompleter.Completer(self.__env).complete)
+                readline.parse_and_bind("tab: complete")
+            except ModuleNotFoundError:
+                pass
             code.InteractiveConsole(self.__env, "<InteractiveInterpreter at #{}>".format(hex(id(self)))).interact(banner, exit_message)
         finally:
             if old_ps1 is None and hasattr(sys, "ps1"):
