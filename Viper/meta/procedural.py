@@ -232,9 +232,7 @@ class ProceduralImporter(PathFinder, Loader):
 
         if spec:
 
-            # print("Trying to import '{}', got '{}'".format(fullname, spec))
-
-            spec.loader = cls(spec.loader)
+            special = False
                     
             from pathlib import Path
             import sys
@@ -244,14 +242,21 @@ class ProceduralImporter(PathFinder, Loader):
                 package_dir = dir / module
                 if package_dir.is_dir():
                     for file in package_dir.iterdir():
-                        if file.name == "__proc__.py":
-                            # print("Got a special package")
+                        if file.name == "__proc__.py":      # This is a procedural package
                             ProceduralImporter.__loading_packages[fullname] = file
+                            special = True
                             break
             
-            ProceduralImporter.__cache[fullname] = spec
+            if package and package in ProceduralImporter.__loaded_packages:     # Parent is procedural
+                special = True
+            
+            if special:
+                spec.loader = cls(spec.loader)
+                ProceduralImporter.__cache[fullname] = spec
 
-        return spec
+                return spec
+        
+        return None
     
 
     @staticmethod
@@ -404,6 +409,6 @@ class ProceduralImporter(PathFinder, Loader):
 
 
 
-sys.meta_path[-1] = ProceduralImporter      # Replace the source finder
+sys.meta_path.insert(0, ProceduralImporter)
 
 del Loader, ModuleSpec, PathFinder, Path, sys, ModuleType, Sequence, WeakValueDictionary
