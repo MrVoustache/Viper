@@ -84,9 +84,7 @@ class frozendict(dict[K, V]):
     def fromkeys(iterable : Iterable[K], value : V | None = None) -> "frozendict[K, V | None]":
         return frozendict(super().fromkeys(iterable, value))
 
-
 clean_annotations(frozendict)
-replace_module("Viper.frozendict", frozendict)
 
 
 
