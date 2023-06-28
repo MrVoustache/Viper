@@ -3,8 +3,8 @@ This module adds metaclasses that make classes iterable, yielding all of their i
 """
 
 
-from typing import Any, Iterator, Sequence, TypeVar, Type
-from weakref import WeakSet, WeakValueDictionary
+from typing import Any, Generator, Sequence, TypeVar
+from weakref import WeakValueDictionary
 
 __all__ = ["InstanceReferencingClass", "InstancePreservingClass", "InstanceReferencingHierarchy", "InstancePreservingHierarchy"]
 
@@ -42,7 +42,9 @@ class InstanceReferencingClass(type):
     1
     """
 
-    def __new__(cls : Type["InstanceReferencingClass"], name : str, bases : tuple[type], dct : dict):
+    __instances : WeakValueDictionary[int, Any]
+
+    def __new__(cls, name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """
@@ -66,9 +68,10 @@ class InstanceReferencingClass(type):
         old_new = None
         if "__new__" in dct:
             old_new = dct["__new__"]
-        for b in bases:
-            if hasattr(b, "__new__"):
-                old_new = getattr(b, "__new__")
+        else:
+            for b in bases:
+                if hasattr(b, "__new__"):
+                    old_new = getattr(b, "__new__")
         if old_new == None:
             old_new = object.__new__
 
@@ -113,11 +116,11 @@ class InstanceReferencingClass(type):
         cls.__instances = s
         return cls
     
-    def __iter__(self : Type[T]) -> Iterator[T]:
+    def __iter__(self : type[T]) -> Generator[T, None, None]:
         """
         Implements the iteration over the class' instances
         """
-        return iter(self.__instances.values())
+        yield from tuple(self.__instances.values())
     
     def __len__(self) -> int:
         """
@@ -156,7 +159,7 @@ class InstancePreservingClass(type):
     2
     """
 
-    def __new__(cls : type["InstancePreservingClass"], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls, name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """
@@ -178,9 +181,10 @@ class InstancePreservingClass(type):
         old_new = None
         if "__new__" in dct:
             old_new = dct["__new__"]
-        for b in bases:
-            if hasattr(b, "__new__"):
-                old_new = getattr(b, "__new__")
+        else:
+            for b in bases:
+                if hasattr(b, "__new__"):
+                    old_new = getattr(b, "__new__")
         if old_new == None:
             old_new = object.__new__
 
@@ -223,11 +227,11 @@ class InstancePreservingClass(type):
         cls.__instances = s
         return cls
     
-    def __iter__(self : type[T]) -> Iterator[T]:
+    def __iter__(self : type[T]) -> Generator[T, None, None]:
         """
         Implements the iteration over the class' instances
         """
-        return iter(self.__instances)
+        yield from tuple(self.__instances)
     
     def __len__(self) -> int:
         """
@@ -267,9 +271,9 @@ class InstanceReferencingHierarchy(type):
     [<__main__.A object at 0x000001C607E309A0>, <__main__.A object at 0x000001C607E309D0>]
     """
 
-    __instances : dict[type[T], WeakValueDictionary[int, T]] = {}
+    __instances : dict[type, WeakValueDictionary[int, Any]] = {}
 
-    def __new__(cls : type["InstanceReferencingHierarchy"], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls, name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """            
@@ -299,9 +303,10 @@ class InstanceReferencingHierarchy(type):
         old_new = None
         if "__new__" in dct:
             old_new = dct["__new__"]
-        for b in bases:
-            if hasattr(b, "__new__"):
-                old_new = getattr(b, "__new__")
+        else:
+            for b in bases:
+                if hasattr(b, "__new__"):
+                    old_new = getattr(b, "__new__")
         if old_new == None:
             old_new = object.__new__
         
@@ -339,11 +344,11 @@ class InstanceReferencingHierarchy(type):
         InstanceReferencingHierarchy.__instances[cls] = s
         return cls
 
-    def __iter__(self : type[T]) -> Iterator[T]:
+    def __iter__(self : type[T]) -> Generator[T, None, None]:
         """
         Implements the iteration over the class' instances
         """
-        for cls, cls_set in set(InstanceReferencingHierarchy.__instances.items()):
+        for cls, cls_set in tuple(InstanceReferencingHierarchy.__instances.items()):
             if issubclass(cls, self):
                 yield from cls_set.values()
     
@@ -352,7 +357,7 @@ class InstanceReferencingHierarchy(type):
         Implements the len of this class (the number of existing instances)
         """
         l = 0
-        for cls, cls_set in set(InstanceReferencingHierarchy.__instances.items()):
+        for cls, cls_set in tuple(InstanceReferencingHierarchy.__instances.items()):
             if issubclass(cls, self):
                 l += len(cls_set)
         return l
@@ -390,9 +395,9 @@ class InstancePreservingHierarchy(type):
     [<__main__.B object at 0x000001C607E30A00>, <__main__.A object at 0x000001C607E309A0>, <__main__.A object at 0x000001C607E309D0>]
     """
 
-    __instances : dict[type[T], list[T]] = {}
+    __instances : dict[type, list] = {}
 
-    def __new__(cls : type["InstancePreservingHierarchy"], name : str, bases : tuple[type], dct : dict):
+    def __new__(cls, name : str, bases : tuple[type], dct : dict):
         """
         Implements the creation of a new class
         """
@@ -414,9 +419,10 @@ class InstancePreservingHierarchy(type):
         old_new = None
         if "__new__" in dct:
             old_new = dct["__new__"]
-        for b in bases:
-            if hasattr(b, "__new__"):
-                old_new = getattr(b, "__new__")
+        else:
+            for b in bases:
+                if hasattr(b, "__new__"):
+                    old_new = getattr(b, "__new__")
         if old_new == None:
             old_new = object.__new__
         
@@ -459,11 +465,11 @@ class InstancePreservingHierarchy(type):
         InstancePreservingHierarchy.__instances[cls] = s
         return cls
     
-    def __iter__(self : type[T]) -> Iterator[T]:
+    def __iter__(self : type[T]) -> Generator[T, None, None]:
         """
         Implements the iteration over the class' instances
         """
-        for cls, cls_set in InstancePreservingHierarchy.__instances.items():
+        for cls, cls_set in tuple(InstancePreservingHierarchy.__instances.items()):
             if issubclass(cls, self):
                 yield from cls_set
     
@@ -472,7 +478,7 @@ class InstancePreservingHierarchy(type):
         Implements the len of this class (the number of existing instances)
         """
         l = 0
-        for cls, cls_set in InstancePreservingHierarchy.__instances.items():
+        for cls, cls_set in tuple(InstancePreservingHierarchy.__instances.items()):
             if issubclass(cls, self):
                 l += len(cls_set)
         return l
@@ -481,4 +487,4 @@ class InstancePreservingHierarchy(type):
 
     
 
-del Any, Iterator, Sequence, TypeVar, T, WeakSet
+del T, Any, Generator, Sequence, TypeVar, WeakValueDictionary
