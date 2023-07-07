@@ -155,13 +155,6 @@ class Sender(ConnectionBase):
         """
         raise NotImplementedError()
     
-    @abstractmethod
-    async def asend(self, data : bytes | bytearray | memoryview, offset : int = 0, size : Optional[int] = None, /):
-        """
-        Asynchronous version of send.
-        """
-        raise NotImplementedError()
-
 
 
 
@@ -180,27 +173,13 @@ class Receiver(ConnectionBase):
         Raises ConnectionError on failure.
         """
         raise NotImplementedError()
-    
-    @abstractmethod
-    async def arecv(self) -> bytes:
-        """
-        Asynchronous version of recv.
-        """
-        raise NotImplementedError()
-    
+        
     @abstractmethod
     def recv_into(self, buffer : bytearray | memoryview, offset : int = 0, /) -> int:
         """
         Receives the next message in the given buffer and returns the size of the message.
         If given, will only start writing at offset position in the buffer.
         If the buffer doesn't have enough space to write the message, raises BufferTooSmall. An empty bytearray can also be given, and will be allocated with the corresponding size.
-        """
-        raise NotImplementedError()
-    
-    @abstractmethod
-    async def arecv_into(self, buffer : bytearray | memoryview, offset : int = 0, /) -> int:
-        """
-        Asynchronous version of recv_into.
         """
         raise NotImplementedError()
     
@@ -212,26 +191,12 @@ class Receiver(ConnectionBase):
         """
         raise NotImplementedError()
     
-    @abstractmethod
-    async def apoll(self, timeout : float = 0.0, /) -> bool:
-        """
-        Asynchronous version of poll.
-        """
-        raise NotImplementedError()
-
     def __iter__(self) -> Iterator[bytes]:
         """
         Iterates over all the messages received.
         """
         while not self.closed:
             yield self.recv()
-    
-    async def __aiter__(self) -> AsyncIterator[bytes]:
-        """
-        Asynchronously iterates over all the messages received.
-        """
-        while not self.closed:
-            yield await self.arecv()
 
 
 

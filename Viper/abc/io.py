@@ -175,22 +175,6 @@ class BytesReader(BytesIOBase):
         while line:
             line = self.readline()
             yield line
-    
-    @abstractmethod
-    async def aread(self, size : int = -1, /) -> bytes:
-        """
-        Asynchronous version of read.
-        Should wait only if read would block.
-        Should also handle its own loop is necessary. (See async_utils.SelectorLoop/ProactorLoop for more info)
-        """
-        raise NotImplementedError()
-
-    @abstractmethod
-    async def areadinto(self, buffer : bytearray | memoryview, /) -> int:
-        """
-        Same as aread, but reads data into pre-allocated buffer (of a given size) and returns the number of bytes read.
-        """
-        raise NotImplementedError()
 
 
 
@@ -260,15 +244,6 @@ class BytesWriter(BytesIOBase):
                 break
         return n
     
-    @abstractmethod
-    async def awrite(self, data : bytes | bytearray | memoryview, /) -> int:
-        """
-        Asynchronous version of write.
-        Should wait only if write would block.
-        Should also handle its own loop is necessary. (See async_utils.SelectorLoop/ProactorLoop for more info)
-        """
-        raise NotImplementedError()
-
 
 
 
