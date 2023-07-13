@@ -4,9 +4,91 @@ This module stores multiple simpler interfaces for stream manipulation.
 
 from abc import ABCMeta, abstractmethod
 from io import SEEK_CUR, SEEK_END, SEEK_SET
-from typing import Iterable, Iterator, Optional
+from typing import Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload
 
-__all__ = ["IOClosedError", "BytesIOBase", "BytesReader", "BytesWriter", "BytesIO"]
+__all__ = ["IOClosedError", "IOBase", "IOReader", "IOWriter", "IO"]
+
+
+
+
+
+STREAM_PACKET_SIZE = 2 ** 20
+
+T1 = TypeVar("T1", covariant=True)
+
+class Buffer(Protocol[T1], metaclass = ABCMeta):
+
+    """
+    An Abstract Base Class that represents object that behave like readable buffers.
+    """
+
+    @abstractmethod
+    def __len__(self) -> int:
+        """
+        Implements len(self).
+        """
+        raise NotImplementedError
+    
+    @overload
+    @abstractmethod
+    def __getitem__(self, i : SupportsIndex) -> T1:
+        ...
+    
+    @overload
+    @abstractmethod
+    def __getitem__(self, i : slice) -> Sequence[T1]:
+        ...
+
+    def __iter__(self) -> Iterator[T1]:
+        """
+        Implements iter(self).
+        """
+        return (self[i] for i in range(len(self)))
+
+
+
+
+
+T2 = TypeVar("T2")
+
+class MutableBuffer(Protocol[T2], metaclass = ABCMeta):
+
+    """
+    An Abstract Base Class that represents object that behave like readable buffers.
+    """
+
+    @abstractmethod
+    def __len__(self) -> int:
+        """
+        Implements len(self).
+        """
+        raise NotImplementedError
+    
+    @overload
+    @abstractmethod
+    def __getitem__(self, i : SupportsIndex) -> T2:
+        ...
+    
+    @overload
+    @abstractmethod
+    def __getitem__(self, i : slice) -> MutableSequence[T2]:
+        ...
+
+    def __iter__(self) -> Iterator[T2]:
+        """
+        Implements iter(self).
+        """
+        return (self[i] for i in range(len(self)))
+    
+    @overload
+    @abstractmethod
+    def __setitem__(self, i : SupportsIndex, value : T2):
+        ...
+
+    @overload
+    @abstractmethod
+    def __setitem__(self, i : slice, value : Iterable[T2]):
+        ...
 
 
 
@@ -22,7 +104,10 @@ class IOClosedError(Exception):
 
 
 
-class BytesIOBase(metaclass = ABCMeta):
+Buf = TypeVar("Buf", bound=Buffer)
+MutBuf = TypeVar("MutBuf", bound=MutableBuffer)
+
+class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
 
     """
     This class describes basic methods required for most types of streams interfaces.
@@ -122,7 +207,9 @@ class BytesIOBase(metaclass = ABCMeta):
 
 
 
-class BytesReader(BytesIOBase):
+R = TypeVar("R", bound="IOReader")
+
+class IOReader(IOBase, Generic[Buf, MutBuf]):
 
     """
     This class describes an interface for reading from a bytes stream.
@@ -142,7 +229,7 @@ class BytesReader(BytesIOBase):
         return False
 
     @abstractmethod
-    def read(self, size : int = -1, /) -> bytes:
+    def read(self, size : int = -1, /) -> Buf:
         """
         Reads size bytes. If size is -1, then reads as many bytes as possible.
         If not blocking and no bytes are available, returns empty bytes.
@@ -153,20 +240,20 @@ class BytesReader(BytesIOBase):
         raise NotImplementedError()
     
     @abstractmethod
-    def readinto(self, buffer : bytearray | memoryview, /) -> int:
+    def readinto(self, buffer : MutBuf, /) -> int:
         """
         Same as read, but reads data into pre-allocated buffer (of a given size) and returns the number of bytes read.
         """
         raise NotImplementedError()
     
     @abstractmethod
-    def readline(self, size : int = -1, /) -> bytes:
+    def readline(self, size : int = -1, /) -> Buf:
         """
         Same as read, but will stop if b"\n" (newline included) is encountered while reading.
         """
         raise NotImplementedError()
     
-    def readlines(self, size : int = -1, /) -> list[bytes]:
+    def readlines(self, size : int = -1, /) -> list[Buf]:
         """
         Same as readline, but reads multiple lines and returns a list of lines.
         """
@@ -178,7 +265,7 @@ class BytesReader(BytesIOBase):
             lines.append(line)
         return lines
     
-    def __iter__(self) -> Iterator[bytes]:
+    def __iter__(self) -> Iterator[Buf]:
         """
         Implements iter(self). Yields successive lines.
         """
@@ -187,11 +274,27 @@ class BytesReader(BytesIOBase):
             line = self.readline()
             yield line
 
+    def __rshift__(self : R, buffer : "MutBuf | IOWriter[Buf, MutBuf]") -> R:
+        """
+        Implements self >> buffer. Acts like C++ flux operators.
+        """
+        if isinstance(buffer, IOWriter):
+            while data := self.read():
+                buffer.write(data)
+        else:
+            try:
+                self.readinto(buffer)
+            except TypeError:
+                return NotImplemented
+        return self
 
 
 
 
-class BytesWriter(BytesIOBase):
+
+W = TypeVar("W", bound="IOWriter")
+
+class IOWriter(IOBase, Generic[Buf, MutBuf]):
     
     """
     This class describes an interface for writing to a bytes stream.
@@ -225,7 +328,7 @@ class BytesWriter(BytesIOBase):
         raise NotImplementedError()
 
     @abstractmethod
-    def write(self, data : bytes | bytearray | memoryview, /) -> int:
+    def write(self, data : Buf, /) -> int:
         """
         Writes as much of data to the stream. Returns the number of bytes written.
         If not blocking, returns the number of bytes successfully written, even if no bytes could be written.
@@ -235,7 +338,7 @@ class BytesWriter(BytesIOBase):
         """
         raise NotImplementedError()
     
-    def writelines(self, lines : Iterable[bytes | bytearray | memoryview], /) -> int:
+    def writelines(self, lines : Iterable[Buf], /) -> int:
         """
         Writes all the lines in the given iterable.
         Stops if one of the lines cannot be written entirely.
@@ -255,11 +358,25 @@ class BytesWriter(BytesIOBase):
                 break
         return n
     
+    def __lshift__(self : W, buffer : Buf | IOReader[Buf, MutBuf]) -> W:
+        """
+        Implements self << buffer. Acts like C++ flux operators.
+        """
+        if isinstance(buffer, IOReader):
+            while data := buffer.read(STREAM_PACKET_SIZE):
+                self.write(data)
+        else:
+            try:
+                self.write(buffer)
+            except TypeError:
+                return NotImplemented
+        return self
+    
 
 
 
 
-class BytesIO(BytesReader, BytesWriter):
+class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
 
     """
     This class describes an interface for complete IO interactions with a bytes stream.
@@ -270,9 +387,56 @@ class BytesIO(BytesReader, BytesWriter):
     
     def writable(self) -> bool:
         return True
+    
+
+
+
+
+class BytesIOBase(IOBase[bytes | bytearray | memoryview, bytearray | memoryview]):
+    """
+    The abstract base class for byte streams.
+    """
+class BytesReader(IOReader[bytes | bytearray | memoryview, bytearray | memoryview]):
+    """
+    The abstract base class for byte reading streams.
+    """
+class BytesWriter(IOWriter[bytes | bytearray | memoryview, bytearray | memoryview]):
+    """
+    The abstract base class for writing streams.
+    """
+class BytesIO(BytesReader, BytesWriter, IO[bytes | bytearray | memoryview, bytearray | memoryview]):
+    """
+    The abstract base class for byte reading and writing streams.
+    """
+
+__all__ += ["BytesIOBase", "BytesReader", "BytesWriter", "BytesIO"]
+
+class StringIOBase(IOBase[str, bytearray | memoryview]):
+    """
+    The abstract base class for text streams.
+    """
+class StringReader(IOReader[str, bytearray | memoryview]):
+    """
+    The abstract base class for text reading streams.
+    """
+    def readinto(self, buffer) -> Never:
+        """
+        Do not use: cannot write in buffer in text mode.
+        """
+        raise ValueError("Cannot use readinto with text streams")
+class StringWriter(IOWriter[str, bytearray | memoryview]):
+    """
+    The abstract base class for text writing streams.
+    """
+class StringIO(IO[str, bytearray | memoryview]):
+    """
+    The abstract base class for text reading and writing streams.
+    """
+
+__all__ += ["StringIOBase", "StringReader", "StringWriter", "StringIO"]
 
 
 
 
 
-del ABCMeta, abstractmethod, SEEK_CUR, SEEK_END, SEEK_SET, Iterable, Iterator, Optional
+del ABCMeta, abstractmethod, SEEK_CUR, SEEK_END, SEEK_SET, Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, W, R, MutBuf, Buf, T2, T1
