@@ -4,7 +4,8 @@ This module stores multiple simpler interfaces for stream manipulation.
 
 from abc import ABCMeta, abstractmethod
 from io import SEEK_CUR, SEEK_END, SEEK_SET
-from typing import Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload
+from threading import RLock
+from typing import Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, runtime_checkable
 
 __all__ = ["IOClosedError", "IOBase", "IOReader", "IOWriter", "IO"]
 
@@ -16,6 +17,7 @@ STREAM_PACKET_SIZE = 2 ** 20
 
 T1 = TypeVar("T1", covariant=True)
 
+@runtime_checkable
 class Buffer(Protocol[T1], metaclass = ABCMeta):
 
     """
@@ -51,6 +53,7 @@ class Buffer(Protocol[T1], metaclass = ABCMeta):
 
 T2 = TypeVar("T2")
 
+@runtime_checkable
 class MutableBuffer(Protocol[T2], metaclass = ABCMeta):
 
     """
@@ -113,12 +116,21 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
     This class describes basic methods required for most types of streams interfaces.
     """
 
+    @property
+    @abstractmethod
+    def lock(self) -> RLock:
+        """
+        This property should return a recursive lock for the thread to acquire the ressource.
+        While the lock is held, not other thread should be able to use this stream.
+        """
+        raise NotImplementedError
+
     @abstractmethod
     def fileno(self) -> int:
         """
         If available, returns the file descriptor (integer) representing the underlying stream for the system.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     def isatty(self) -> bool:
         """
@@ -132,7 +144,7 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         """
         Closes the stream.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     @property
     @abstractmethod
@@ -140,21 +152,21 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         """
         Returns True if the stream has already been closed.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     @abstractmethod
     def tell(self) -> int:
         """
         Returns the current position in the stream (from the start).
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     @abstractmethod
     def seekable(self) -> bool:
         """
         Returns true if the stream is seekable.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     def seek(self, offset : int, whence : int = SEEK_SET, /) -> int:
         """
@@ -172,19 +184,21 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         - If whence = SEEK_END = {SEEK_END}, seeks from the end of the stream. Offset should be negative.
         """
         
-    @abstractmethod
-    def readable(self) -> bool:
+    @property
+    def readable(self) -> int | float:
         """
-        Returns True if the stream can be read from (i.e. has at least a read() method).
+        Returns the amount of data that cen be immediately read from the stream.
+        Should be a positive integer or float("inf").
         """
-        raise NotImplementedError()
+        return 0
     
-    @abstractmethod
-    def writable(self) -> bool:
+    @property
+    def writable(self) -> int | float:
         """
-        Returns True is the stream can be written to (i.e. has at least a write() method).
+        Returns the amount of data that can be immediately written to the stream.
+        Should be a positive integer or float("inf").
         """
-        raise NotImplementedError()
+        return 0
     
     def __del__(self):
         """
@@ -212,57 +226,62 @@ R = TypeVar("R", bound="IOReader")
 class IOReader(IOBase, Generic[Buf, MutBuf]):
 
     """
-    This class describes an interface for reading from a bytes stream.
+    This class describes an interface for reading from a stream.
     """
 
     @abstractmethod
     def read_blocking(self) -> bool:
         """
-        Returns True if the stream can block on reading when no bytes are available.
+        Returns True if the stream can block on reading when no data are available.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
-    def readable(self) -> bool:
-        return True
-
-    def writable(self) -> bool:
-        return False
-
+    @property
     @abstractmethod
-    def read(self, size : int = -1, /) -> Buf:
+    def readable(self) -> int | float:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def read(self, size : int | float = float("inf"), /) -> Buf:
         """
-        Reads size bytes. If size is -1, then reads as many bytes as possible.
-        If not blocking and no bytes are available, returns empty bytes.
-        If blocking and no bytes are available, it should block until size bytes are available.
-        If the stream closes while waiting, it should return the remaining bytes or empty bytes too.
+        Reads size pieces of data. If size is float("inf"), then reads as much data as possible.
+        If not blocking and no data is available, returns empty data.
+        If blocking and no data is available, it should block until enough data is available.
+        If the stream closes while waiting, it should return the remaining data or empty data. It should return empty data at least once when closed.
         Should raise IOClosedError when trying to read from a closed stream.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     @abstractmethod
     def readinto(self, buffer : MutBuf, /) -> int:
         """
-        Same as read, but reads data into pre-allocated buffer (of a given size) and returns the number of bytes read.
+        Same as read, but reads data into pre-allocated buffer (of a given size) and returns the amount of data read.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     @abstractmethod
-    def readline(self, size : int = -1, /) -> Buf:
+    def readline(self, size : int | float = float("inf"), /) -> Buf:
         """
-        Same as read, but will stop if b"\n" (newline included) is encountered while reading.
+        Same as read, but will stop if a newline (included) is encountered while reading.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
-    def readlines(self, size : int = -1, /) -> list[Buf]:
+    def readlines(self, size : int | float = float("inf"), /) -> list[Buf]:
         """
         Same as readline, but reads multiple lines and returns a list of lines.
         """
+        if not isinstance(size, int | float):
+            raise TypeError(f"Expected int or float, got '{type(size).__name__}'")
+        if (not isinstance(size, int) and size != float("inf")) or size < 0:
+            raise ValueError(f"Expected positive integer or float('inf'), got {size}")
+        
         n = 0
         lines = []
-        while n < size:
-            line = self.readline(max(size - n, -1))
-            n += len(line)
-            lines.append(line)
+        with self.lock:
+            while n < size:
+                line = self.readline(max(size - n, -1))
+                n += len(line)
+                lines.append(line)
         return lines
     
     def __iter__(self) -> Iterator[Buf]:
@@ -270,23 +289,47 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         Implements iter(self). Yields successive lines.
         """
         line = True
-        while line:
-            line = self.readline()
-            yield line
+        with self.lock:
+            while line:
+                line = self.readline()
+                yield line
 
-    def __rshift__(self : R, buffer : "MutBuf | IOWriter[Buf, MutBuf]") -> R:
+    @overload
+    def __rshift__(self : R, buffer : MutBuf) -> R:
+        pass
+
+    @overload
+    def __rshift__(self, buffer : "IOWriter[Buf, MutBuf]") -> None:
+        pass
+
+    def __rshift__(self, buffer):
         """
-        Implements self >> buffer. Acts like C++ flux operators.
+        Implements self >> buffer.
+        Acts like C++ flux operators.
+        If the second operand is an instance of IOWriter, it will write to it until no data is available from self.read().
         """
         if isinstance(buffer, IOWriter):
-            while data := self.read():
-                buffer.write(data)
+            with self.lock, buffer.lock:
+                packet = True
+                while packet:
+                    available = min(buffer.writable, STREAM_PACKET_SIZE)
+                    packet = self.read(available)
+                    n = buffer.write(packet)
+                    assert n == len(packet), "Could not write packet entirely into destination buffer"
         else:
             try:
                 self.readinto(buffer)
+                return self
             except TypeError:
                 return NotImplemented
-        return self
+    
+    def __rlshift__(self : R, buffer : MutBuf) -> R:
+        """
+        Implements buffer << self.
+        Acts like C++ flux operators.
+        If the second operand is an instance of IOWriter, it will write to it until no data is available from self.read().
+        """
+        return self >> buffer
 
 
 
@@ -297,21 +340,20 @@ W = TypeVar("W", bound="IOWriter")
 class IOWriter(IOBase, Generic[Buf, MutBuf]):
     
     """
-    This class describes an interface for writing to a bytes stream.
+    This class describes an interface for writing to a stream.
     """
 
     @abstractmethod
     def write_blocking(self) -> bool:
         """
-        Returns True if the stream can block on writing when no bytes can be written.
+        Returns True if the stream can block on writing when no data can be written.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
-    def writable(self) -> bool:
-        return True
-
-    def readable(self) -> bool:
-        return False
+    @property
+    @abstractmethod
+    def writable(self) -> int | float:
+        raise NotImplementedError
 
     def flush(self):
         """
@@ -323,54 +365,81 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
     @abstractmethod
     def truncate(self, size : Optional[int] = None, /):
         """
-        Changes stream size, adding zero bytes if size is bigger than current size. By default, resizes to the current position. Position in stream should not change.
+        Changes stream size, adding null data if size is bigger than current size. By default, resizes to the current position. Position in stream should not change.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def write(self, data : Buf, /) -> int:
         """
-        Writes as much of data to the stream. Returns the number of bytes written.
-        If not blocking, returns the number of bytes successfully written, even if no bytes could be written.
+        Writes as much of data to the stream. Returns the amount of data written.
+        If not blocking, returns the amount of data successfully written, even if no data could be written.
         If blocking, waits to write all of data.
-        If the stream closes while waiting, returns the number of bytes that could be successfully written before that.
+        If the stream closes while waiting, returns the amount of data that could be successfully written before that.
         Should raise IOClosedError when attempting to write to a closed stream.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
     
     def writelines(self, lines : Iterable[Buf], /) -> int:
         """
         Writes all the lines in the given iterable.
         Stops if one of the lines cannot be written entirely.
-        Does not add b"\n" at the end of each line.
-        Returns the number of bytes written.
+        Does not add newlines at the end of each line.
+        Returns the amount of data written.
         """
         from typing import Iterable
         if not isinstance(lines, Iterable):
             raise TypeError("Expected iterable, got " + repr(type(lines).__name__))
         n = 0
-        for line in lines:
-            if not isinstance(line, bytes | bytearray | memoryview):
-                raise TypeError("Expected iterable of bytes, bytearray or memoriview, got " + repr(type(line).__name__))
-            ni = self.write(line)
-            n += ni
-            if ni < len(line):
-                break
+        with self.lock:
+            for line in lines:
+                try:
+                    ni = self.write(line)
+                except TypeError as e:
+                    raise e from None
+                n += ni
+                if ni < len(line):
+                    break
         return n
     
-    def __lshift__(self : W, buffer : Buf | IOReader[Buf, MutBuf]) -> W:
+    @overload
+    def __lshift__(self : W, buffer : Buf) -> W:
+        ...
+
+    @overload
+    def __lshift__(self, buffer : IOReader[Buf, MutBuf]) -> None:
+        pass
+    
+    def __lshift__(self, buffer):
         """
-        Implements self << buffer. Acts like C++ flux operators.
+        Implements self << buffer.
+        Acts like C++ flux operators.
+        If the second operand is an instance of IOReader, it will read from it until no data is available from buffer.read().
         """
         if isinstance(buffer, IOReader):
-            while data := buffer.read(STREAM_PACKET_SIZE):
-                self.write(data)
+            with self.lock, buffer.lock:
+                packet = True
+                while packet:
+                    available = min(self.writable, STREAM_PACKET_SIZE)
+                    packet = buffer.read(available)
+                    n = self.write(packet)
+                    assert n == len(packet), "Could not write packet entirely into destination buffer"
         else:
             try:
-                self.write(buffer)
+                n = 0
+                while n < len(buffer):
+                    n += self.write(buffer[n:])
+                return self
             except TypeError:
                 return NotImplemented
-        return self
+    
+    def __rrshift__(self : W, buffer : Buf | IOReader[Buf, MutBuf]) -> W:
+        """
+        Implements buffer >> self.
+        Acts like C++ flux operators.
+        If the second operand is an instance of IOReader, it will read from it until no data is available from buffer.read().
+        """
+        return self << buffer
     
 
 
@@ -379,15 +448,8 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
 class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
 
     """
-    This class describes an interface for complete IO interactions with a bytes stream.
-    """
-
-    def readable(self) -> bool:
-        return True
-    
-    def writable(self) -> bool:
-        return True
-    
+    This class describes an interface for complete IO interactions with a stream.
+    """    
 
 
 
@@ -415,7 +477,7 @@ class StringIOBase(IOBase[str, bytearray | memoryview]):
     """
     The abstract base class for text streams.
     """
-class StringReader(IOReader[str, bytearray | memoryview]):
+class StringReader(StringIOBase, IOReader[str, bytearray | memoryview]):
     """
     The abstract base class for text reading streams.
     """
@@ -424,11 +486,11 @@ class StringReader(IOReader[str, bytearray | memoryview]):
         Do not use: cannot write in buffer in text mode.
         """
         raise ValueError("Cannot use readinto with text streams")
-class StringWriter(IOWriter[str, bytearray | memoryview]):
+class StringWriter(StringIOBase, IOWriter[str, bytearray | memoryview]):
     """
     The abstract base class for text writing streams.
     """
-class StringIO(IO[str, bytearray | memoryview]):
+class StringIO(StringReader, StringWriter, IO[str, bytearray | memoryview]):
     """
     The abstract base class for text reading and writing streams.
     """
@@ -439,4 +501,4 @@ __all__ += ["StringIOBase", "StringReader", "StringWriter", "StringIO"]
 
 
 
-del ABCMeta, abstractmethod, SEEK_CUR, SEEK_END, SEEK_SET, Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, W, R, MutBuf, Buf, T2, T1
+del ABCMeta, abstractmethod, SEEK_CUR, SEEK_END, SEEK_SET, Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, W, R, MutBuf, Buf, T2, T1, RLock

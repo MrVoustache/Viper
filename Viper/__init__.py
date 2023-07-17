@@ -7,4 +7,4 @@ The Viper library contains many useful tools to improve the capabilities of Pyth
 from .meta import procedural
 del procedural
 
-__all__ = ["abc", "building", "compress", "debugging", "meta", "better_threading", "exceptions", "format", "frozendict", "interactive", "pickle_utils", "warnings"]
+__all__ = ["abc", "building", "compress", "debugging", "meta", "better_threading", "exceptions", "format", "frozendict", "interactive", "pickle_utils", "warnings", "io"]
