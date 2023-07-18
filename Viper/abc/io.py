@@ -237,9 +237,10 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         raise NotImplementedError
 
     @property
-    @abstractmethod
     def readable(self) -> int | float:
-        raise NotImplementedError
+        if self.closed:
+            return 0
+        return STREAM_PACKET_SIZE
     
     @abstractmethod
     def read(self, size : int | float = float("inf"), /) -> Buf:
@@ -351,9 +352,10 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         raise NotImplementedError
 
     @property
-    @abstractmethod
     def writable(self) -> int | float:
-        raise NotImplementedError
+        if self.closed:
+            return 0
+        return STREAM_PACKET_SIZE
 
     def flush(self):
         """
