@@ -122,6 +122,8 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         """
         This property should return a recursive lock for the thread to acquire the ressource.
         While the lock is held, not other thread should be able to use this stream.
+
+        Use it if you want to perform operations that depend on the readable and writable properties.
         """
         raise NotImplementedError
 
@@ -189,6 +191,12 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         """
         Returns the amount of data that cen be immediately read from the stream.
         Should be a positive integer or float("inf").
+
+        If the stream is blocking, and an attempt to read more data is made, the call to read() will necessarly block.
+        On the other hand, reading less should not block.
+
+        If the stream is not blocking, it will immediately return at most this amount of data.
+        Note that in such a case, if readable is 0, it doesn't mean no more data will come.
         """
         return 0
     
@@ -197,6 +205,13 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         """
         Returns the amount of data that can be immediately written to the stream.
         Should be a positive integer or float("inf").
+
+        If the stream is blocking, an attempt to write more data than writable might cause the stream to block.
+        On the other hand, writing less should not block.
+
+        If the stream is not blocking, it should be able to write at most this amount of data.
+        Any more data might be discarded.
+        Note that in such a case, if writable is 0, it doesn't mean no more data will ever be writable.
         """
         return 0
     
@@ -247,7 +262,7 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         """
         Reads size pieces of data. If size is float("inf"), then reads as much data as possible.
         If not blocking and no data is available, returns empty data.
-        If blocking and no data is available, it should block until enough data is available.
+        If blocking and no data is available, it should block until enough data is available (it should block even if the required size is zero).
         If the stream closes while waiting, it should return the remaining data or empty data. It should return empty data at least once when closed.
         Should raise IOClosedError when trying to read from a closed stream.
         """
@@ -297,11 +312,11 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
 
     @overload
     def __rshift__(self : R, buffer : MutBuf) -> R:
-        pass
+        ...
 
     @overload
     def __rshift__(self, buffer : "IOWriter[Buf, MutBuf]") -> None:
-        pass
+        ...
 
     def __rshift__(self, buffer):
         """
@@ -311,12 +326,28 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         """
         if isinstance(buffer, IOWriter):
             with self.lock, buffer.lock:
-                packet = True
-                while packet:
-                    available = min(buffer.writable, STREAM_PACKET_SIZE)
-                    packet = self.read(available)
+                while True:
+                    available_for_write = min(buffer.writable, STREAM_PACKET_SIZE)
+                    available_for_read = min(self.readable, STREAM_PACKET_SIZE)
+                    if not available_for_read:
+                        if self.closed:
+                            return
+                        self.read(0)
+                        available_for_read = min(self.readable, STREAM_PACKET_SIZE)
+                        if not available_for_read:
+                            return
+                    if not available_for_write:
+                        if buffer.closed:
+                            return
+                        available_for_write = 1
+                    packet = self.read(min(available_for_write, available_for_read))
+                    if buffer.closed:
+                        raise RuntimeError("Could not write all data to the destination stream")
                     n = buffer.write(packet)
-                    assert n == len(packet), "Could not write packet entirely into destination buffer"
+                    while n < len(packet):
+                        if buffer.closed:
+                            raise RuntimeError("Could not write all data to the destination stream")
+                        n += buffer.write(packet[n:])
         else:
             try:
                 self.readinto(buffer)
@@ -376,7 +407,7 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         """
         Writes as much of data to the stream. Returns the amount of data written.
         If not blocking, returns the amount of data successfully written, even if no data could be written.
-        If blocking, waits to write all of data.
+        If blocking, waits to write all of data (it should block until space is available for writing even if the data provided is empty).
         If the stream closes while waiting, returns the amount of data that could be successfully written before that.
         Should raise IOClosedError when attempting to write to a closed stream.
         """
@@ -410,7 +441,7 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
 
     @overload
     def __lshift__(self, buffer : IOReader[Buf, MutBuf]) -> None:
-        pass
+        ...
     
     def __lshift__(self, buffer):
         """
@@ -420,12 +451,28 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         """
         if isinstance(buffer, IOReader):
             with self.lock, buffer.lock:
-                packet = True
-                while packet:
-                    available = min(self.writable, STREAM_PACKET_SIZE)
-                    packet = buffer.read(available)
+                while True:
+                    available_for_write = min(self.writable, STREAM_PACKET_SIZE)
+                    available_for_read = min(buffer.readable, STREAM_PACKET_SIZE)
+                    if not available_for_read:
+                        if buffer.closed:
+                            return
+                        buffer.read(0)
+                        available_for_read = min(buffer.readable, STREAM_PACKET_SIZE)
+                        if not available_for_read:
+                            return
+                    if not available_for_write:
+                        if self.closed:
+                            return
+                        available_for_write = 1
+                    packet = buffer.read(min(available_for_write, available_for_read))
+                    if self.closed:
+                        raise RuntimeError("Could not write all data to the destination stream")
                     n = self.write(packet)
-                    assert n == len(packet), "Could not write packet entirely into destination buffer"
+                    while n < len(packet):
+                        if self.closed:
+                            raise RuntimeError("Could not write all data to the destination stream")
+                        n += self.write(packet[n:])
         else:
             try:
                 n = 0
