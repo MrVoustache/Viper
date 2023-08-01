@@ -4,7 +4,7 @@ This module stores multiple simpler interfaces for stream manipulation.
 
 from abc import ABCMeta, abstractmethod
 from io import SEEK_CUR, SEEK_END, SEEK_SET
-from threading import RLock
+from threading import Lock, RLock
 from typing import Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, runtime_checkable
 
 __all__ = ["IOClosedError", "IOBase", "IOReader", "IOWriter", "IO"]
@@ -244,6 +244,13 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
     This class describes an interface for reading from a stream.
     """
 
+    @property
+    def read_lock(self) -> RLock:
+        """
+        An alias for self.lock.
+        """
+        return self.lock
+
     @abstractmethod
     def read_blocking(self) -> bool:
         """
@@ -293,7 +300,7 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         
         n = 0
         lines = []
-        with self.lock:
+        with self.read_lock:
             while n < size:
                 line = self.readline(max(size - n, -1))
                 n += len(line)
@@ -305,10 +312,13 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         Implements iter(self). Yields successive lines.
         """
         line = True
-        with self.lock:
+        with self.read_lock:
             while line:
-                line = self.readline()
-                yield line
+                try:
+                    line = self.readline()
+                    yield line
+                except IOClosedError:
+                    break
 
     @overload
     def __rshift__(self : R, buffer : MutBuf) -> R:
@@ -325,7 +335,7 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         If the second operand is an instance of IOWriter, it will write to it until no data is available from self.read().
         """
         if isinstance(buffer, IOWriter):
-            with self.lock, buffer.lock:
+            with self.read_lock, buffer.write_lock:
                 while True:
                     available_for_write = min(buffer.writable, STREAM_PACKET_SIZE)
                     available_for_read = min(self.readable, STREAM_PACKET_SIZE)
@@ -374,6 +384,13 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
     """
     This class describes an interface for writing to a stream.
     """
+
+    @property
+    def write_lock(self) -> RLock:
+        """
+        An alias for self.lock.
+        """
+        return self.lock
 
     @abstractmethod
     def write_blocking(self) -> bool:
@@ -450,7 +467,7 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         If the second operand is an instance of IOReader, it will read from it until no data is available from buffer.read().
         """
         if isinstance(buffer, IOReader):
-            with self.lock, buffer.lock:
+            with self.write_lock, buffer.read_lock:
                 while True:
                     available_for_write = min(self.writable, STREAM_PACKET_SIZE)
                     available_for_read = min(buffer.readable, STREAM_PACKET_SIZE)
@@ -498,7 +515,120 @@ class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
 
     """
     This class describes an interface for complete IO interactions with a stream.
-    """    
+    """
+
+    class LockGroup:
+
+        """
+        This class is used to create a group of locks that behave like one.
+        Acquiering the group will acquire all the locks one after the other.
+        Same for releasing.
+        """
+
+        def __init__(self, *locks : "Lock | RLock") -> None:
+            from threading import Lock, RLock
+            LType, RLType = type(Lock()), type(RLock())
+            for l in locks:
+                if not isinstance(l, (LType, RLType)):
+                    raise TypeError(f"Expected lock-like object, got '{type(l).__name__}'")
+            self.__locks = locks
+        
+        @property
+        def locks(self):
+            """
+            The tuple of locks that this lock group holds.
+            """
+            return self.__locks
+        
+        def acquire(self, blocking : bool = True, timeout : float = float("inf")) -> bool:
+            """
+            Acquires the group of locks.
+            """
+            try:
+                timeout = float(timeout)
+            except:
+                pass
+            if not isinstance(blocking, bool):
+                raise TypeError(f"Expected bool for blocking, got '{type(blocking).__name__}'")
+            if not isinstance(timeout, float):
+                raise TypeError(f"Expected float for timeout, got '{type(timeout).__name__}'")
+            if timeout < 0:
+                raise ValueError(f"Expected positive value for timeout, got {timeout}")
+            
+            if timeout == float("inf"):
+                for i, li in enumerate(self.locks):
+                    try:
+                        ok = li.acquire(blocking=blocking)
+                    except:
+                        for j, lj in enumerate(self.locks):
+                            if j >= i:
+                                break
+                            lj.release()
+                        raise
+                    if not ok:
+                        for j, lj in enumerate(self.locks):
+                            if j >= i:
+                                break
+                            lj.release()
+                        return False
+                return True
+
+            else:
+                from time import time
+                t = time()
+                for i, li in enumerate(self.locks):
+                    t_i = time()
+                    timeout -= t_i - t
+                    t = t_i
+                    if timeout < 0:
+                        return False
+                    try:
+                        ok = li.acquire(blocking=blocking, timeout=timeout)
+                    except:
+                        for j, lj in enumerate(self.locks):
+                            if j >= i:
+                                break
+                            lj.release()
+                        raise
+                    if not ok:
+                        for j, lj in enumerate(self.locks):
+                            if j >= i:
+                                break
+                            lj.release()
+                        return False
+                return True
+        
+        def release(self):
+            """
+            Releases the group of locks.
+            """
+            for l in self.locks:
+                l.release()
+
+        def __enter__(self):
+            """
+            Implements with self.
+            """
+            self.acquire()
+        
+        def __exit__(self, exc_type, exc_value, traceback):
+            """
+            Implements with self.
+            """
+            self.release()
+
+    @property
+    def lock(self) -> "RLock | LockGroup":
+        """
+        Returns a lock group of the read lock and the write lock if they are different.
+        Subclasses may create different read and write locks if meaningful.
+        """
+        rl = self.read_lock
+        wl = self.write_lock
+        if rl != wl:
+            return self.LockGroup(rl, wl)
+        return rl
+
 
 
 
