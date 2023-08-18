@@ -1,1 +1,1 @@
-import Viper; del Viper
+import Viper.__startup__; del Viper.__startup__; import sys; sys.modules.pop("Viper.__startup__"); del sys
