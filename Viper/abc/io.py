@@ -7,6 +7,9 @@ from io import SEEK_CUR, SEEK_END, SEEK_SET
 from threading import Lock, RLock
 from typing import Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, runtime_checkable
 
+from Viper.abc.utils import Budget
+from .utils import Budget
+
 __all__ = ["IOClosedError", "IOBase", "IOReader", "IOWriter", "IO"]
 
 
@@ -187,33 +190,46 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
         """
         
     @property
-    def readable(self) -> int | float:
+    @abstractmethod
+    def readable(self) -> Budget:
         """
         Returns the amount of data that cen be immediately read from the stream.
-        Should be a positive integer or float("inf").
+        This should be a Budget object. Such objects are similar to semaphores, but anyone can increase them and you can lock the ressource even without reaching zero.
 
-        If the stream is blocking, and an attempt to read more data is made, the call to read() will necessarly block.
-        On the other hand, reading less should not block.
+        About reading behavior of IO objects:
+        - Trying to read less than or exactly this value should always work without blocking.
+        - Trying to read more might block.
+        - If this value is zero and the stream is closed, trying to read should raise an IOClosedError.
+        - If this value is zero and the stream is not closed, data might become available for reading later.
 
-        If the stream is not blocking, it will immediately return at most this amount of data.
-        Note that in such a case, if readable is 0, it doesn't mean no more data will come.
+        Note that you can await budget objects using the "with" statement:
+        >>> with stream.readable as available:          # Should wait until stream.readable != 0 or stream.closed == True
+        Using the "with" statement on this attribute should also acquire the read_lock of the stream.
+
+        Note that it should not overestimate the readable data. When returning a large value by default, this value should be readable, not less.
         """
-        return 0
+        raise NotImplementedError
     
     @property
-    def writable(self) -> int | float:
+    @abstractmethod
+    def writable(self) -> Budget:
         """
         Returns the amount of data that can be immediately written to the stream.
-        Should be a positive integer or float("inf").
+        This should be a Budget object. Such objects are similar to semaphores, but anyone can increase them and you can lock the ressource even without reaching zero.
+        
+        About writing behavior of IO objects:
+        - Trying to write less than or exactly this value should always work without blocking.
+        - Trying to write more might block.
+        - If this value is zero and the stream is closed, trying to write should raise an IOClosedError.
+        - If this value is zero and the stream is not closed, space might become available for writing later.
 
-        If the stream is blocking, an attempt to write more data than writable might cause the stream to block.
-        On the other hand, writing less should not block.
+        Note that you can await budget objects using the "with" statement:
+        >>> with stream.writable as available:          # Should wait until stream.writable != 0 or stream.closed == True
+        Using the "with" statement on this attribute should also acquire the write_lock of the stream.
 
-        If the stream is not blocking, it should be able to write at most this amount of data.
-        Any more data might be discarded.
-        Note that in such a case, if writable is 0, it doesn't mean no more data will ever be writable.
+        Note that it should not overestimate the writable data. When returning a large value by default, this value should be writable, not less.
         """
-        return 0
+        raise NotImplementedError
     
     def __del__(self):
         """
@@ -250,27 +266,19 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
         An alias for self.lock.
         """
         return self.lock
-
-    @abstractmethod
-    def read_blocking(self) -> bool:
-        """
-        Returns True if the stream can block on reading when no data are available.
-        """
-        raise NotImplementedError
-
+    
     @property
-    def readable(self) -> int | float:
-        if self.closed:
-            return 0
-        return STREAM_PACKET_SIZE
+    def writable(self) -> Budget:
+        from .utils import Budget
+        return Budget(0)
     
     @abstractmethod
     def read(self, size : int | float = float("inf"), /) -> Buf:
         """
         Reads size pieces of data. If size is float("inf"), then reads as much data as possible.
-        If not blocking and no data is available, returns empty data.
-        If blocking and no data is available, it should block until enough data is available (it should block even if the required size is zero).
-        If the stream closes while waiting, it should return the remaining data or empty data. It should return empty data at least once when closed.
+        Will block until enough data is available.
+        If the stream closes while waiting, it should return the remaining data or empty data.
+        Use with the "readable" attribute to predict its behavior.
         Should raise IOClosedError when trying to read from a closed stream.
         """
         raise NotImplementedError
@@ -320,50 +328,42 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
                 except IOClosedError:
                     break
 
-    @overload
     def __rshift__(self : R, buffer : MutBuf) -> R:
-        ...
-
-    @overload
-    def __rshift__(self, buffer : "IOWriter[Buf, MutBuf]") -> None:
-        ...
-
-    def __rshift__(self, buffer):
         """
         Implements self >> buffer.
         Acts like C++ flux operators.
         If the second operand is an instance of IOWriter, it will write to it until no data is available from self.read().
         """
-        if isinstance(buffer, IOWriter):
-            with self.read_lock, buffer.write_lock:
-                while True:
-                    available_for_write = min(buffer.writable, STREAM_PACKET_SIZE)
-                    available_for_read = min(self.readable, STREAM_PACKET_SIZE)
-                    if not available_for_read:
-                        if self.closed:
-                            return
-                        self.read(0)
-                        available_for_read = min(self.readable, STREAM_PACKET_SIZE)
-                        if not available_for_read:
-                            return
-                    if not available_for_write:
-                        if buffer.closed:
-                            return
-                        available_for_write = 1
-                    packet = self.read(min(available_for_write, available_for_read))
-                    if buffer.closed:
-                        raise RuntimeError("Could not write all data to the destination stream")
-                    n = buffer.write(packet)
-                    while n < len(packet):
-                        if buffer.closed:
-                            raise RuntimeError("Could not write all data to the destination stream")
-                        n += buffer.write(packet[n:])
-        else:
-            try:
-                self.readinto(buffer)
-                return self
-            except TypeError:
-                return NotImplemented
+        # if isinstance(buffer, IOWriter):
+        #     with self.read_lock, buffer.write_lock:
+        #         while True:
+        #             available_for_write = min(buffer.writable, STREAM_PACKET_SIZE)
+        #             available_for_read = min(self.readable, STREAM_PACKET_SIZE)
+        #             if not available_for_read:
+        #                 if self.closed:
+        #                     return
+        #                 self.read(0)
+        #                 available_for_read = min(self.readable, STREAM_PACKET_SIZE)
+        #                 if not available_for_read:
+        #                     return
+        #             if not available_for_write:
+        #                 if buffer.closed:
+        #                     return
+        #                 available_for_write = 1
+        #             packet = self.read(min(available_for_write, available_for_read))
+        #             if buffer.closed:
+        #                 raise RuntimeError("Could not write all data to the destination stream")
+        #             n = buffer.write(packet)
+        #             while n < len(packet):
+        #                 if buffer.closed:
+        #                     raise RuntimeError("Could not write all data to the destination stream")
+        #                 n += buffer.write(packet[n:])
+        # else:
+        try:
+            self.readinto(buffer)
+            return self
+        except TypeError:
+            return NotImplemented
     
     def __rlshift__(self : R, buffer : MutBuf) -> R:
         """
@@ -391,19 +391,11 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         An alias for self.lock.
         """
         return self.lock
-
-    @abstractmethod
-    def write_blocking(self) -> bool:
-        """
-        Returns True if the stream can block on writing when no data can be written.
-        """
-        raise NotImplementedError
-
+    
     @property
-    def writable(self) -> int | float:
-        if self.closed:
-            return 0
-        return STREAM_PACKET_SIZE
+    def readable(self) -> Budget:
+        from .utils import Budget
+        return Budget(0)
 
     def flush(self):
         """
@@ -423,9 +415,9 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
     def write(self, data : Buf, /) -> int:
         """
         Writes as much of data to the stream. Returns the amount of data written.
-        If not blocking, returns the amount of data successfully written, even if no data could be written.
-        If blocking, waits to write all of data (it should block until space is available for writing even if the data provided is empty).
+        Will wait to write all of data (it should block until space is available for writing even if the data provided is empty).
         If the stream closes while waiting, returns the amount of data that could be successfully written before that.
+        Use with the "writable" attribute to predict its behavior.
         Should raise IOClosedError when attempting to write to a closed stream.
         """
         raise NotImplementedError
@@ -469,27 +461,21 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         if isinstance(buffer, IOReader):
             with self.write_lock, buffer.read_lock:
                 while True:
-                    available_for_write = min(self.writable, STREAM_PACKET_SIZE)
-                    available_for_read = min(buffer.readable, STREAM_PACKET_SIZE)
-                    if not available_for_read:
-                        if buffer.closed:
-                            return
-                        buffer.read(0)
-                        available_for_read = min(buffer.readable, STREAM_PACKET_SIZE)
+                    with self.writable as available_for_write, buffer.readable as available_for_read:
+                        available_for_write = min(available_for_write, STREAM_PACKET_SIZE)
+                        available_for_read = min(available_for_read, STREAM_PACKET_SIZE)
                         if not available_for_read:
+                            if not buffer.closed:
+                                raise RuntimeError("Reading stream acquired with no data available and is not closed")
                             return
-                    if not available_for_write:
-                        if self.closed:
+                        if not available_for_write:
+                            if not self.closed:
+                                raise RuntimeError("Writing stream acquired with no space available and is not closed")
                             return
-                        available_for_write = 1
-                    packet = buffer.read(min(available_for_write, available_for_read))
-                    if self.closed:
-                        raise RuntimeError("Could not write all data to the destination stream")
-                    n = self.write(packet)
-                    while n < len(packet):
-                        if self.closed:
-                            raise RuntimeError("Could not write all data to the destination stream")
-                        n += self.write(packet[n:])
+                        packet = buffer.read(min(available_for_write, available_for_read))
+                        n = self.write(packet)
+                        if n < len(packet):
+                            raise RuntimeError("Could not write all data to writing stream whereas it guaranteed it would fit")
         else:
             try:
                 n = 0
@@ -499,7 +485,7 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
             except TypeError:
                 return NotImplemented
     
-    def __rrshift__(self : W, buffer : Buf | IOReader[Buf, MutBuf]) -> W:
+    def __rrshift__(self : W, buffer : Buf) -> W:
         """
         Implements buffer >> self.
         Acts like C++ flux operators.
@@ -516,6 +502,16 @@ class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
     """
     This class describes an interface for complete IO interactions with a stream.
     """
+
+    @property
+    @abstractmethod
+    def readable(self) -> Budget:
+        raise NotImplementedError
+    
+    @property
+    @abstractmethod
+    def writable(self) -> Budget:
+        raise NotImplementedError
 
     class LockGroup:
 
@@ -652,11 +648,11 @@ class BytesIO(BytesReader, BytesWriter, IO[bytes | bytearray | memoryview, bytea
 
 __all__ += ["BytesIOBase", "BytesReader", "BytesWriter", "BytesIO"]
 
-class StringIOBase(IOBase[str, bytearray | memoryview]):
+class StringIOBase(IOBase[str, Never]):
     """
     The abstract base class for text streams.
     """
-class StringReader(StringIOBase, IOReader[str, bytearray | memoryview]):
+class StringReader(StringIOBase, IOReader[str, Never]):
     """
     The abstract base class for text reading streams.
     """
@@ -665,11 +661,11 @@ class StringReader(StringIOBase, IOReader[str, bytearray | memoryview]):
         Do not use: cannot write in buffer in text mode.
         """
         raise ValueError("Cannot use readinto with text streams")
-class StringWriter(StringIOBase, IOWriter[str, bytearray | memoryview]):
+class StringWriter(StringIOBase, IOWriter[str, Never]):
     """
     The abstract base class for text writing streams.
     """
-class StringIO(StringReader, StringWriter, IO[str, bytearray | memoryview]):
+class StringIO(StringReader, StringWriter, IO[str, Never]):
     """
     The abstract base class for text reading and writing streams.
     """

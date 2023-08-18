@@ -28,29 +28,46 @@ class BytesIO(AbstractBytesIO):
         if not isinstance(initial_data, bytes | bytearray | memoryview):
             raise TypeError(f"Expected readable buffer, got '{type(initial_data).__name__}'")
         super().__init__()
-        from threading import RLock
+        from .abc.utils import Budget
+        from .abc.io import STREAM_PACKET_SIZE
         self.__buffer = bytearray(initial_data)
         self.__pos : int = 0
         self.__closed : bool = False
-        self.__lock = RLock()
+        self.__readable = Budget()
+        self.__writable = Budget(STREAM_PACKET_SIZE)
+        self.__lock = self.LockGroup(self.__readable.lock, self.__writable.lock)
 
     @property
-    def lock(self) -> RLock:
+    def lock(self):
         return self.__lock
     
     @property
-    def readable(self) -> int | float:
-        return max(0, len(self.__buffer) - self.__pos)
+    def readable(self):
+        if self.closed:
+            self.__readable.value = 0
+        else:
+            self.__readable.value = max(0, len(self.__buffer) - self.__pos)
+        return self.__readable
     
     @property
-    def writable(self) -> int | float:
-        return float("inf")
+    def read_lock(self) -> RLock:
+        return self.__readable.lock
+    
+    @property
+    def writable(self):
+        return self.__writable
+    
+    @property
+    def write_lock(self) -> RLock:
+        return self.__writable.lock
 
     def fileno(self) -> int:
         raise OSError("BytesIO objects are not associated to any system object.")
     
     def close(self):
         with self.lock:
+            self.__writable.close()
+            self.__readable.close()
             self.__closed = True
 
     @property
@@ -85,10 +102,8 @@ class BytesIO(AbstractBytesIO):
             if pos < 0:
                 raise ValueError("Negative position in stream.")
             self.__pos = pos
+            self.__readable.value = len(self.__buffer) - self.__pos
             return self.__pos
-    
-    def write_blocking(self) -> bool:
-        return False
     
     def truncate(self, size: int | None = None):
         if size is None:
@@ -103,8 +118,10 @@ class BytesIO(AbstractBytesIO):
                 raise IOClosedError(f"{type(self).__name__} is closed")
             if len(self.__buffer) < size:
                 self.__buffer.extend(b"\0" * (size - len(self.__buffer)))
+                self.__readable.value = len(self.__buffer) - self.__pos
             elif len(self.__buffer) > size:
                 self.__buffer = self.__buffer[:size]
+                self.__readable.value = len(self.__buffer) - self.__pos
 
     def write(self, data: bytes | bytearray | memoryview) -> int:
         if not isinstance(data, bytes | bytearray | memoryview):
@@ -117,10 +134,8 @@ class BytesIO(AbstractBytesIO):
                 self.__buffer.extend(b"\0" * (self.__pos - len(self.__buffer)))
             self.__buffer[self.__pos : self.__pos + len(data)] = data
             self.__pos += len(data)
+            self.__readable.value = len(self.__buffer) - self.__pos
             return len(data)
-    
-    def read_blocking(self) -> bool:
-        return False
     
     def read(self, size: int | float = float("inf")) -> bytes:
         if not isinstance(size, int) and size != float("inf"):
@@ -135,6 +150,7 @@ class BytesIO(AbstractBytesIO):
                 raise IOClosedError(f"{type(self).__name__} is closed")
             data = bytes(self.__buffer[self.__pos : min(len(self.__buffer), self.__pos + total_size)])
             self.__pos += len(data)
+            self.__readable.value = len(self.__buffer) - self.__pos
             return data
         
     def readinto(self, buffer: bytearray | memoryview) -> int:
@@ -165,6 +181,7 @@ class BytesIO(AbstractBytesIO):
             except ValueError:
                 data = bytes(memoryview(self.__buffer)[self.__pos : min(len(self.__buffer), self.__pos + total_size)])
             self.__pos += len(data)
+            self.__readable.value = len(self.__buffer) - self.__pos
             return data
         
 
@@ -184,13 +201,16 @@ class StringIO(AbstractStringIO):
         if not isinstance(initial_data, str):
             raise TypeError(f"Expected str, got '{type(initial_data).__name__}'")
         super().__init__()
-        from threading import RLock
+        from .abc.utils import Budget
+        from .abc.io import STREAM_PACKET_SIZE
         self.__buffer = bytearray(initial_data.encode())
         self.__bytes_pos : int = 0
         self.__str_pos : int = 0
         self.__closed : bool = False
         self.__str_len : int = len(initial_data)
-        self.__lock = RLock()
+        self.__readable = Budget()
+        self.__writable = Budget(STREAM_PACKET_SIZE)
+        self.__lock = self.LockGroup(self.__readable.lock, self.__writable.lock)
 
     def __parallel_walker(self, start : int = 0) -> Iterator[tuple[int, int]]:
         """
@@ -243,22 +263,32 @@ class StringIO(AbstractStringIO):
         return bytes_pos
 
     @property
-    def lock(self) -> RLock:
+    def lock(self):
         return self.__lock
     
     @property
-    def readable(self) -> int | float:
-        return max(0, self.__str_len - self.__str_pos)
+    def read_lock(self) -> RLock:
+        return self.__readable.lock
     
     @property
-    def writable(self) -> int | float:
-        return float("inf")
+    def readable(self):
+        return self.__readable
+    
+    @property
+    def write_lock(self) -> RLock:
+        return self.__writable.lock
+    
+    @property
+    def writable(self):
+        return self.__writable
 
     def fileno(self) -> int:
         raise OSError("StringIO objects are not associated to any system object.")
     
     def close(self):
         with self.lock:
+            self.__writable.close()
+            self.__readable.close()
             self.__closed = True
 
     @property
@@ -298,10 +328,8 @@ class StringIO(AbstractStringIO):
                 
             self.__bytes_pos = self.__str_pos_to_bytes_pos(final_str_pos)
             self.__str_pos = final_str_pos
+            self.__readable.value = self.__str_len - self.__str_pos
             return self.__str_pos
-    
-    def write_blocking(self) -> bool:
-        return False
     
     def truncate(self, size: int | None = None):
         if size is None:
@@ -320,6 +348,7 @@ class StringIO(AbstractStringIO):
             elif len(self.__buffer) > bytes_pos:
                 self.__buffer = self.__buffer[:bytes_pos]
             self.__str_len = size
+            self.__readable.value = self.__str_len - self.__str_pos
 
     def write(self, data: str) -> int:
         if not isinstance(data, str):
@@ -346,10 +375,8 @@ class StringIO(AbstractStringIO):
             self.__str_len -= len(old_data.decode())
             self.__str_len += len(data)
             self.__str_pos += len(data)
+            self.__readable.value = self.__str_len - self.__str_pos
             return len(data)
-    
-    def read_blocking(self) -> bool:
-        return False
     
     def read(self, size: int | float = float("inf")) -> str:
         if not isinstance(size, int) and size != float("inf"):
@@ -371,6 +398,7 @@ class StringIO(AbstractStringIO):
             data = self.__buffer[bytes_start : bytes_end].decode()
             self.__bytes_pos = bytes_end
             self.__str_pos += len(data)
+            self.__readable.value = self.__str_len - self.__str_pos
             return data
         
     def readinto(self, buffer: bytearray | memoryview, encoding : str = "utf-8") -> int:
@@ -378,7 +406,7 @@ class StringIO(AbstractStringIO):
             raise TypeError(f"Expected writable buffer, got '{type(buffer).__name__}'")
         if not isinstance(encoding, str):
             raise TypeError(f"Expected str for encoding, got '{type(encoding).__name__}'")
-        from codecs import lookup
+        from codecs import lookup, getincrementalencoder
         try:
             lookup(encoding)
         except LookupError as e:
@@ -393,12 +421,15 @@ class StringIO(AbstractStringIO):
             if self.closed:
                 from .abc.io import IOClosedError
                 raise IOClosedError(f"{type(self).__name__} is closed")
+            writer = getincrementalencoder(encoding)()
             for char in reader():
-                encoded_char = char.encode(encoding)
+                encoded_char = writer.encode(char)
                 if i + len(encoded_char) >= len(buffer):
                     break
                 buffer[i : i + len(encoded_char)] = encoded_char
                 i += len(encoded_char)
+                self.__str_pos += len(char)
+            self.__readable.value = self.__str_len - self.__str_pos
         return i
     
     def readline(self, size: int | float = float("inf")) -> str:
@@ -424,6 +455,7 @@ class StringIO(AbstractStringIO):
             data = self.__buffer[bytes_start : bytes_end].decode()
             self.__bytes_pos = bytes_end
             self.__str_pos += len(data)
+            self.__readable.value = self.__str_len - self.__str_pos
             return data
         
 
@@ -447,35 +479,29 @@ class BytesBuffer(AbstractBytesIO):
             raise TypeError(f"Expected int, got '{type(size).__name__}'")
         if size <= 0:
             raise ValueError(f"Expected positive nonzero integer for buffer size, got {size}")
-        from threading import RLock, Event
+        from .abc.utils import Budget
         self.__buffer = bytearray(size)
         self.__start = 0
         self.__end = 0
-        self.__read_lock = RLock()
-        self.__read_event = Event()
-        self.__write_lock = RLock()
-        self.__write_event = Event()
+        self.__readable = Budget()
+        self.__writable = Budget(size)
         self.__closed : bool = False
 
     @property
     def read_lock(self) -> RLock:
-        return self.__read_lock
+        return self.__readable.lock
 
     @property
     def write_lock(self) -> RLock:
-        return self.__write_lock
+        return self.__writable.lock
     
     @property
-    def readable(self) -> int:
-        with self.read_lock:
-            return self.__end - self.__start
+    def readable(self):
+        return self.__readable
 
     @property
-    def writable(self) -> int:
-        with self.write_lock:
-            if self.__end == self.__start:
-                return len(self.__buffer)
-            return (self.__start - self.__end) % len(self.__buffer)
+    def writable(self):
+        return self.__writable
         
     def fileno(self) -> int:
         raise OSError(f"{type(self).__name__} objects have no associated file descriptors")
@@ -483,8 +509,9 @@ class BytesBuffer(AbstractBytesIO):
     def close(self):
         with self.write_lock:
             self.__closed = True
-            self.__write_event.set()
-            self.__read_event.set()
+            self.__writable.close()
+            if not self.__readable:
+                self.__readable.close()
         
     @property
     def closed(self) -> bool:
@@ -502,12 +529,6 @@ class BytesBuffer(AbstractBytesIO):
     def seek(self, offset: int, whence: int = SEEK_SET) -> int:
         raise OSError(f"{type(self).__name__} is not seekable")
     
-    def write_blocking(self) -> bool:
-        return True
-    
-    def read_blocking(self) -> bool:
-        return True
-    
     def truncate(self, size: int | None = None):
         raise OSError(f"{type(self).__name__} is not truncable")
     
@@ -517,33 +538,34 @@ class BytesBuffer(AbstractBytesIO):
         data = memoryview(data)
         done = 0
         with self.write_lock:
-            if self.closed:
+            if self.closed and not self.__writable:
                 from .abc.io import IOClosedError
                 raise IOClosedError(f"{type(self).__name__} is closed")
             
-            while done < len(data) and not self.closed:
+            while done < len(data):
 
-                while (available := (self.__start - self.__end) % len(self.__buffer) if self.__start != self.__end else len(self.__buffer)) == 0:        # No space available for writing
-                    self.__write_event.wait()
-                    if self.closed:
-                        return done
-                    self.__write_event.clear()
+                with self.__writable as available:
 
-                if self.__start % len(self.__buffer) > self.__end % len(self.__buffer):     # Writing in the middle of the buffer
+                    if not available:
+                        break
+
                     next_packet = data[done : min(len(data), done + available)]
 
-                else:                                                                       # Writing up to the end of the buffer
-                    available = -self.__end % len(self.__buffer)
-                    if available == 0:                                                      # Special case, everybody is at zero
-                        available = len(self.__buffer)
-                    next_packet = data[done : min(len(data), done + available)]
+                    if self.__start % len(self.__buffer) > self.__end % len(self.__buffer):     # Writing in the middle of the buffer
+                        self.__buffer[self.__end % len(self.__buffer) : (self.__end % len(self.__buffer)) + len(next_packet)] = next_packet
 
-                self.__buffer[self.__end % len(self.__buffer) : (self.__end % len(self.__buffer)) + len(next_packet)] = next_packet
-                notify = self.__end == self.__start
-                self.__end += len(next_packet)
-                if notify:
-                    self.__read_event.set()
-                done += len(next_packet)
+                    else:                                                                       # Writing up to the end of the buffer
+                        breakpoint = (-self.__end) % len(self.__buffer)     # How much space remains from __end to the end of the buffer
+                        if breakpoint == 0:                                 # Special case when __end = __start = 0
+                            breakpoint = len(self.__buffer)
+                        packet1, packet2 = next_packet[:breakpoint], next_packet[breakpoint:]
+                        self.__buffer[self.__end % len(self.__buffer) : self.__end % len(self.__buffer) + len(packet1)] = packet1
+                        self.__buffer[0 : len(packet2)] = packet2
+                    
+                    self.__end += len(next_packet)
+                    self.__readable += len(next_packet)
+                    self.__writable -= len(next_packet)
+                    done += len(next_packet)
 
             return done
     
@@ -558,34 +580,37 @@ class BytesBuffer(AbstractBytesIO):
             buffer = bytearray()
         read = 0
         with self.read_lock:
-            if self.closed and self.__start == self.__end:
+            if self.closed and not self.__readable:
                 from .abc.io import IOClosedError
                 raise IOClosedError(f"{type(self).__name__} is closed")
             
-            while read < size and not self.closed:
+            while read < size:
 
-                while self.__end - self.__start == 0 and not self.closed:
-                    self.__read_event.wait()
-                    self.__read_event.clear()
-                
-                if self.__end != self.__start:
+                with self.__readable as available:
+
+                    if not available:
+                        break
+                    
                     if self.__start % len(self.__buffer) < self.__end % len(self.__buffer):     # Reading in the middle of the buffer
                         packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) : self.__end % len(self.__buffer)]
+                        packet = packet[:min(len(packet), size - read)]
                     
                     else:                                                                       # Reading up to the end of the buffer
-                        packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) :]
+                        packet = memoryview(b"" + memoryview(self.__buffer)[self.__start % len(self.__buffer) :] + memoryview(self.__buffer)[: self.__end % len(self.__buffer)])
+                        packet = packet[:min(len(packet), size - read)]
 
-                    if len(packet) > size - read:
-                        packet = packet[:size - read]
-                else:
-                    packet = b""
+                    buffer[read : read + len(packet)] = packet
+                    
+                    self.__start += len(packet)
+                    read += len(packet)
+                    try:
+                        self.__writable += len(packet)
+                    except RuntimeError:
+                        pass
+                    self.__readable -= len(packet)
 
-                notify = self.__start + len(self.__buffer) == self.__end
-                buffer[read : read + len(packet)] = packet
-                self.__start += len(packet)
-                if notify:
-                    self.__write_event.set()
-                read += len(packet)
+            if self.closed and self.__readable == 0 and not self.__readable.closed:
+                self.__readable.close()
             
             return bytes(memoryview(buffer)[:read])
     
@@ -595,38 +620,41 @@ class BytesBuffer(AbstractBytesIO):
         size = len(buffer)
         read = 0
         with self.read_lock:
-            if self.closed and self.__start == self.__end:
+            if self.closed and not self.__readable:
                 from .abc.io import IOClosedError
                 raise IOClosedError(f"{type(self).__name__} is closed")
             
-            while read < size and not self.closed:
+            while read < size:
 
-                while self.__end - self.__start == 0 and not self.closed:
-                    self.__read_event.wait()
-                    self.__read_event.clear()
-                
-                if self.__end != self.__start:
+                with self.__readable as available:
+
+                    if not available:
+                        break
+                    
                     if self.__start % len(self.__buffer) < self.__end % len(self.__buffer):     # Reading in the middle of the buffer
                         packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) : self.__end % len(self.__buffer)]
+                        packet = packet[:min(len(packet), size - read)]
                     
                     else:                                                                       # Reading up to the end of the buffer
-                        packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) :]
+                        packet = memoryview(b"" + memoryview(self.__buffer)[self.__start % len(self.__buffer) :] + memoryview(self.__buffer)[: self.__end % len(self.__buffer)])
+                        packet = packet[:min(len(packet), size - read)]
 
-                    if len(packet) > size - read:
-                        packet = packet[:size - read]
-                else:
-                    packet = b""
-                
-                notify = self.__start + len(self.__buffer) == self.__end
-                buffer[read : read + len(packet)] = packet
-                self.__start += len(packet)
-                if notify:
-                    self.__write_event.set()
-                read += len(packet)
-            
+                    buffer[read : read + len(packet)] = packet
+                    
+                    self.__start += len(packet)
+                    read += len(packet)
+                    try:
+                        self.__writable += len(packet)
+                    except RuntimeError:
+                        pass
+                    self.__readable -= len(packet)
+
+            if self.closed and self.__readable == 0 and not self.__readable.closed:
+                self.__readable.close()
+
             return read
     
-    def readline(self, size: int | float = float("inf")) -> bytes | bytearray | memoryview:
+    def readline(self, size: int | float = float("inf")) -> bytes:
         if not isinstance(size, int) and size != float("inf"):
             raise TypeError(f"Expected int of float('inf'), got '{type(size).__name__}'")
         if size < 0:
@@ -637,42 +665,44 @@ class BytesBuffer(AbstractBytesIO):
             buffer = bytearray()
         read = 0
         with self.read_lock:
-            if self.closed and self.__start == self.__end:
+            if self.closed and not self.__readable:
                 from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")   
-              
-            while read < size and not self.closed:
+                raise IOClosedError(f"{type(self).__name__} is closed")
+            
+            while read < size:
 
-                while self.__end - self.__start == 0 and not self.closed:
-                    self.__read_event.wait()
-                    self.__read_event.clear()
-                
-                if self.__end != self.__start:
+                with self.__readable as available:
+
+                    if not available:
+                        break
+
                     if self.__start % len(self.__buffer) < self.__end % len(self.__buffer):     # Reading in the middle of the buffer
                         packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) : self.__end % len(self.__buffer)]
+                        packet = packet[:min(len(packet), size - read)]
                     
                     else:                                                                       # Reading up to the end of the buffer
-                        packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) :]
+                        packet = memoryview(b"" + memoryview(self.__buffer)[self.__start % len(self.__buffer) :] + memoryview(self.__buffer)[: self.__end % len(self.__buffer)])
+                        packet = packet[:min(len(packet), size - read)]
 
-                    if len(packet) > size - read:
-                        packet = packet[:size - read]
+                    packet = packet.tobytes()
+                    if b"\n" in packet:
+                        packet = packet[:packet.index(b"\n") + 1]
+                    buffer[read : read + len(packet)] = packet
+                    
+                    self.__start += len(packet)
+                    read += len(packet)
+                    try:
+                        self.__writable += len(packet)
+                    except RuntimeError:
+                        pass
+                    self.__readable -= len(packet)
 
-                    packet = bytes(packet)
-                else:
-                    packet = b""
-
-                if b"\n" in packet:
-                    packet = packet[:packet.index(b"\n") + 1]
-                
-                notify = self.__start + len(self.__buffer) == self.__end
-                buffer[read : read + len(packet)] = packet
-                self.__start += len(packet)
-                if notify:
-                    self.__write_event.set()
-                read += len(packet)
-                if b"\n" in packet:
-                    break
+                    if packet.endswith(b"\n"):
+                        break
             
+            if self.closed and self.__readable == 0 and not self.__readable.closed:
+                self.__readable.close()
+
             return bytes(memoryview(buffer)[:read])
         
 
@@ -752,38 +782,31 @@ class StringBuffer(AbstractStringIO):
             raise TypeError(f"Expected int, got '{type(size).__name__}'")
         if size <= 0:
             raise ValueError(f"Expected positive nonzero integer for buffer size, got {size}")
-        from threading import RLock, Event
+        from .abc.utils import Budget
         self.__buffer = bytearray(size)
         self.__extra = b""
         self.__start = 0
         self.__end = 0
-        self.__read_lock = RLock()
-        self.__read_event = Event()
-        self.__write_lock = RLock()
-        self.__write_event = Event()
+        self.__readable = Budget()
+        self.__writable = Budget(size)
         self.__closed : bool = False
-        self.__read = 0
         self.__total = 0
 
     @property
     def read_lock(self) -> RLock:
-        return self.__read_lock
+        return self.__readable.lock
 
     @property
     def write_lock(self) -> RLock:
-        return self.__write_lock
+        return self.__writable.lock
     
     @property
-    def readable(self) -> int:
-        with self.read_lock:
-            return self.__total - self.__read
+    def readable(self):
+        return self.__readable
 
     @property
-    def writable(self) -> int:  # This is an approximation, but if the approximation fails, self.__extra will store the data that can't be stored in the buffer
-        with self.write_lock:
-            if self.__end == self.__start:
-                return len(self.__buffer)
-            return (self.__start - self.__end) % len(self.__buffer)
+    def writable(self):  # This is an approximation, but if the approximation fails, self.__extra will store the data that can't be stored in the buffer
+        return self.__writable
         
     def fileno(self) -> int:
         raise OSError(f"{type(self).__name__} objects have no associated file descriptors")
@@ -791,8 +814,9 @@ class StringBuffer(AbstractStringIO):
     def close(self):
         with self.write_lock:
             self.__closed = True
-            self.__write_event.set()
-            self.__read_event.set()
+            self.__writable.close()
+            if not self.__readable:
+                self.__readable.close()
         
     @property
     def closed(self) -> bool:
@@ -810,62 +834,52 @@ class StringBuffer(AbstractStringIO):
     def seek(self, offset: int, whence: int = SEEK_SET) -> int:
         raise OSError(f"{type(self).__name__} is not seekable")
     
-    def write_blocking(self) -> bool:
-        return True
-    
-    def read_blocking(self) -> bool:
-        return True
-    
     def truncate(self, size: int | None = None):
         raise OSError(f"{type(self).__name__} is not truncable")
-    
+        
     def write(self, data: str) -> int:
         if not isinstance(data, str):
             raise TypeError(f"Expected str, got '{type(data).__name__}'")
-        bdata = data.encode()
+        from codecs import getincrementalencoder
+        encoder = getincrementalencoder("utf-8")()
         done = 0
         with self.write_lock:
             if self.closed:
                 from .abc.io import IOClosedError
                 raise IOClosedError(f"{type(self).__name__} is closed")
             
-            bdata, self.__extra = self.__extra + bdata, b""
-            extra = b""
+            while done < len(data):
 
-            if len(data) <= self.writable:      # It should be done without blocking : we promised that!
-                available = ((self.__start - self.__end) % len(self.__buffer)) if self.__start != self.__end else len(self.__buffer)
-                bdata, extra = bdata[:available], bdata[available:]
+                with self.__writable as available:
 
-            while done < len(bdata):
+                    if not available:
+                        break
 
-                while (available := (self.__start - self.__end) % len(self.__buffer) if self.__start != self.__end else len(self.__buffer)) == 0:        # No space available for writing
-                    self.__write_event.wait()
-                    if self.closed:
-                        return done
-                    self.__write_event.clear()
+                    bavailable = ((self.__start - self.__end) % len(self.__buffer)) if self.__start != self.__end else len(self.__buffer)
 
-                if self.__start % len(self.__buffer) > self.__end % len(self.__buffer):     # Writing in the middle of the buffer
-                    next_packet = bdata[done : min(len(bdata), done + available)]
+                    done += len(spacket := data[done : done + available])
+                    packet = self.__extra + encoder.encode(spacket)
+                    packet, extra = memoryview(packet)[:bavailable], packet[available:]
 
-                else:                                                                       # Writing up to the end of the buffer
-                    available = -self.__end % len(self.__buffer)
-                    if available == 0:                                                      # Special case, everybody is at zero
-                        available = len(self.__buffer)
-                    next_packet = bdata[done : min(len(bdata), done + available)]
+                    if self.__start % len(self.__buffer) > self.__end % len(self.__buffer):     # Writing in the middle of the buffer
+                        self.__buffer[self.__end % len(self.__buffer) : self.__end % len(self.__buffer) + len(packet)] = packet
 
-                self.__buffer[self.__end % len(self.__buffer) : (self.__end % len(self.__buffer)) + len(next_packet)] = next_packet
-                notify = self.__end == self.__start
-                self.__end += len(next_packet)
-                if notify:
-                    self.__read_event.set()
-                done += len(next_packet)
+                    else:                                                                       # Writing up to the end of the buffer
+                        breakpoint = (-self.__end) % len(self.__buffer)     # How much space remains from __end to the end of the buffer
+                        if breakpoint == 0:                                 # Special case when __end = __start = 0
+                            breakpoint = len(self.__buffer)
+                        packet1, packet2 = packet[:breakpoint], packet[breakpoint:]
+                        self.__buffer[self.__end % len(self.__buffer) : self.__end % len(self.__buffer) + len(packet1)] = packet1
+                        self.__buffer[0 : len(packet2)] = packet2
+
+                    self.__end += len(packet)
+                    self.__extra = extra
+                    self.__readable += len(spacket)
+                    self.__writable -= len(spacket)
             
-            self.__extra = extra
-            self.__total += len(data)
-            if self.__end == self.__start:
-                self.__read_event.set()
+            self.__total += done
 
-            return len(data)
+            return done
         
     def __write_extra(self):
         """
@@ -904,38 +918,36 @@ class StringBuffer(AbstractStringIO):
 
             data_blocks : list[str] = []
             
-            while read < size and not self.closed:
+            while read < size:
 
-                while self.__end - self.__start == 0 and not self.__extra and not self.closed:
-                    self.__read_event.wait()
-                    self.__read_event.clear()
+                with self.__readable as available:
 
-                if self.__end - self.__start == 0 and self.__extra:
-                    self.__write_extra()
-                
-                if self.__end != self.__start:
+                    if not available:
+                        break
+
+                    if self.__end - self.__start == 0 and self.__extra:
+                        self.__write_extra()
+                    
                     if self.__start % len(self.__buffer) < self.__end % len(self.__buffer):     # Reading in the middle of the buffer
                         packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) : self.__end % len(self.__buffer)]
                     
                     else:                                                                       # Reading up to the end of the buffer
-                        packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) :]
+                        packet = memoryview(b"" + memoryview(self.__buffer)[self.__start % len(self.__buffer) :] + memoryview(self.__buffer)[: self.__end % len(self.__buffer)])
 
                     if len(packet) > size - read:
                         packet = packet[:size - read]
-                else:
-                    packet = memoryview(b"")
 
-                used_bytes, chars = read_generator.send(bytes(packet))
-                data_blocks.append(chars)
-                packet = packet[:used_bytes]
+                    used_bytes, chars = read_generator.send(bytes(packet))
+                    data_blocks.append(chars)
+                    packet = packet[:used_bytes]
 
-                notify = self.__start + len(self.__buffer) == self.__end
-                self.__start += len(packet)
-                if notify:
-                    self.__write_event.set()
-                read += len(chars)
-
-                self.__read += len(chars)
+                    self.__start += len(packet)
+                    read += len(chars)
+                    try:
+                        self.__writable += len(chars)
+                    except RuntimeError:
+                        pass
+                    self.__readable -= len(chars)
             
             return "".join(data_blocks)
         
@@ -955,39 +967,39 @@ class StringBuffer(AbstractStringIO):
 
             data_blocks : list[str] = []
             
-            while read < size and not self.closed:
+            while read < size:
 
-                while self.__end - self.__start == 0 and not self.__extra and not self.closed:
-                    self.__read_event.wait()
-                    self.__read_event.clear()
+                with self.__readable as available:
 
-                if self.__end - self.__start == 0 and self.__extra:
-                    self.__write_extra()
-                
-                if self.__end != self.__start:
+                    if not available:
+                        break
+
+                    if self.__end - self.__start == 0 and self.__extra:
+                        self.__write_extra()
+                    
                     if self.__start % len(self.__buffer) < self.__end % len(self.__buffer):     # Reading in the middle of the buffer
                         packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) : self.__end % len(self.__buffer)]
                     
                     else:                                                                       # Reading up to the end of the buffer
-                        packet = memoryview(self.__buffer)[self.__start % len(self.__buffer) :]
+                        packet = memoryview(b"" + memoryview(self.__buffer)[self.__start % len(self.__buffer) :] + memoryview(self.__buffer)[: self.__end % len(self.__buffer)])
 
                     if len(packet) > size - read:
                         packet = packet[:size - read]
-                else:
-                    packet = memoryview(b"")
 
-                used_bytes, chars = read_generator.send(bytes(packet))
-                data_blocks.append(chars)
-                packet = packet[:used_bytes]
+                    used_bytes, chars = read_generator.send(bytes(packet))
+                    data_blocks.append(chars)
+                    packet = packet[:used_bytes]
 
-                notify = self.__start + len(self.__buffer) == self.__end
-                self.__start += len(packet)
-                if notify:
-                    self.__write_event.set()
-                read += len(chars)
-                self.__read += len(chars)
-                if chars.endswith("\n"):
-                    break
+                    self.__start += len(packet)
+                    read += len(chars)
+                    try:
+                        self.__writable += len(chars)
+                    except RuntimeError:
+                        pass
+                    self.__readable -= len(chars)
+
+                    if chars.endswith("\n"):
+                        break
             
             return "".join(data_blocks)
     

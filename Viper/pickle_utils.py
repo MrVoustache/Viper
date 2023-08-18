@@ -2,18 +2,19 @@
 This module adds a few methods and classes that make using pickle easier and more secure.
 """
 
-from Viper.abc.io import BytesReader, BytesWriter
-from Viper.abc.flux import FluxOperator
-from pickle import Unpickler, UnpicklingError
+import pickle
+from functools import wraps
+from pickle import Pickler, Unpickler, UnpicklingError
 from pickle import load as _old_load
 from pickle import loads as _old_loads
-import pickle
-from typing import Any, Dict, Iterable, Iterator
-from Viper.warnings import VulnerabilityWarning
-from Viper.better_threading import Future
-from functools import wraps
+from threading import RLock
+from typing import Any
 
-__all__ = ["PickleVulnerabilityWarning", "ForbiddenPickleError", "WhiteListUnpickler", "BlackListUnpickler", "safe_load", "safe_loads", "DumpOperator", "UnsecureLoadOperator", "SafeLoadOperator"]
+from .abc.io import BytesReader, BytesWriter
+from .io import BytesBuffer, BUFFER_SIZE
+from .warnings import VulnerabilityWarning
+
+__all__ = ["PickleVulnerabilityWarning", "ForbiddenPickleError", "StreamUnpickler", "StreamPickler", "RestrictiveUnpickler", "SafeBuiltinsUnpickler", "WhiteListUnpickler", "BlackListUnpickler", "safe_load", "safe_loads"]
 
 
 
@@ -67,352 +68,548 @@ pickle.loads = loads
 
 
 
-class WhiteListUnpickler(Unpickler):
-    
+class StreamUnpickler(Unpickler, BytesWriter):
+
     """
-    This subclass of unpickler can only load object that have already been registered to their whitelist.
+    A subclass of Unpickler that can be written to like a file. You can write to it until the pickle object has been reconstructed.
+    Note that the unpickling process is done in background : data written to this stream will be immediately used.
     """
 
-    def __init__(self, file: BytesReader, *, fix_imports: bool = True, encoding: str = 'ASCII', errors: str = 'strict', buffers: Iterable[Any] | None = None) -> None:
-        super().__init__(file, fix_imports = fix_imports, encoding = encoding, errors = errors, buffers = buffers)
+    class __ReaderRegulatedBuffer(BytesBuffer):
+
+        """
+        A subclass of bytes buffer that constrains writable space by what is expected to be read in the other end.
+        The writable property will block until it has received a value. Zero indicates the end.
+        """
+
+        def __init__(self, size: int = BUFFER_SIZE) -> None:
+            super().__init__(size)
+            self.writable.value = 0
+
+        def read(self, size: int) -> bytes:
+            with self.read_lock:
+                self.writable.value = size
+                result = super().read(size)
+                return result
+            
+        def readline(self, size: int | None = None) -> bytes:
+            if size is None:    # We have to read an entire line, no matter how long it is.
+                line = bytearray()
+                from .abc.io import STREAM_PACKET_SIZE
+                with self.read_lock:
+                    while True:
+                        self.writable.value = STREAM_PACKET_SIZE
+                        result = super().readline(STREAM_PACKET_SIZE)
+                        line.extend(result)
+                        if result.endswith(b"\n"):
+                            self.writable.value = 0
+                            return bytes(line)
+            else:
+                with self.read_lock:
+                    self.writable.value = size
+                    result = super().readline(size)
+                    return result
+
+        def readinto(self, buffer: bytearray | memoryview) -> int:
+            with self.read_lock:
+                self.writable.value = len(buffer)
+                result = super().readinto(buffer)
+                return result
+        
+        def write(self, data: bytes | bytearray | memoryview) -> int:
+            with self.writable:
+                result = super().write(data)
+                self.writable.value = max(0, self.writable.value - result)
+                return result
+
+
+
+
+
+    def __init__(self) -> None:
+        from threading import Event, Lock, Thread
+        self.__buffer = self.__ReaderRegulatedBuffer()
+        self.__object = None
+        self.__ready = Event()
+        self.__exception = None
+        self.__load_lock = Lock()
+        super().__init__(self.__buffer, fix_imports=True, encoding="ASCII", errors="strict", buffers=None)      # Let's not care about Python 2
+        with self.__load_lock:
+            Thread(target=self.__load, daemon=True, name="StreamUnpickler reconstructor thread").start()
+
+    def __load(self):
+        """
+        Internal function used to reconstruct the object.
+        """
+        with self.__load_lock:
+            if self.closed:
+                from .abc.io import IOClosedError
+                raise IOClosedError("Object has already been loaded")
+            if self.__ready.is_set():
+                return self.__object
+            try:
+                self.__object = super().load()
+            except BaseException as e:
+                self.__exception = e
+            self.__ready.set()
+            self.close()
+
+    @property
+    def lock(self) -> RLock:
+        return self.__buffer.write_lock
+    
+    @property
+    def writable(self):
+        return self.__buffer.writable
+    
+    @property
+    def write_lock(self) -> RLock:
+        return self.__buffer.write_lock
+    
+    def fileno(self) -> int:
+        raise OSError(f"{type(self).__name__} objects have no associated file descriptors")
+    
+    def close(self):
+        self.__buffer.close()
+
+    @property
+    def closed(self) -> bool:
+        return self.__buffer.closed
+    
+    def tell(self) -> int:
+        return self.__buffer.tell()
+    
+    def seekable(self) -> bool:
+        return False
+    
+    def truncate(self, size: int | None = None):
+        raise OSError(f"{type(self).__name__} is not truncable")
+    
+    def write(self, data: bytes | bytearray | memoryview) -> int:
+        return self.__buffer.write(data)
+    
+    def load(self) -> Any:
+        """
+        Loads the object from data written to the stream.
+        The task is actually done in background. This method just waits for the task to complete and returns the reconstructed object.
+        """
+        self.__ready.wait()
+        if self.__exception:
+            raise self.__exception
+        return self.__object
+    
+    def __lshift__(self, other):
+        from .abc.io import IOReader
+        if isinstance(other, IOReader):
+            super().__lshift__(other)
+            return self.load()
+        else:
+            return super().__lshift__(other)
+        
+
+
+    
+
+class StreamPickler(Pickler, BytesReader):
+
+    """
+    A subclass of Pickler that can be read from like a file. You can read from it until the object has been entirely pickled.
+    Note that the pickling process is done in background : data can be read immediately from this stream.
+    """        
+
+
+    def __init__(self, *args) -> None:
+        from threading import Event, Lock, Thread
+        from .io import BytesBuffer
+        if len(args) > 1:
+            raise ValueError("Expected at most one argument : the object to pickle")
+        self.__buffer = BytesBuffer()
+        self.__object = None
+        self.__ready = Event()
+        self.__dump_lock = Lock()
+        self.__dump_method_lock = Lock()
+        super().__init__(self.__buffer, fix_imports=True)
+        with self.__dump_lock:
+            Thread(target=self.__dump, daemon=True, name="StreamPickler deconstructor thread").start()
+            if args:
+                self.dump(args[0])
+
+    def __dump(self):
+        """
+        Internal function that will dump the given object into the stream.
+        """
+        with self.__dump_lock:
+            if self.closed:
+                from .abc.io import IOClosedError
+                raise IOClosedError("Object has already been pickled")
+            self.__ready.wait()
+            super().dump(self.__object)
+            self.close()
+
+    @property
+    def lock(self) -> RLock:
+        return self.__buffer.read_lock
+    
+    @property
+    def readable(self):
+        return self.__buffer.readable
+    
+    @property
+    def read_lock(self) -> RLock:
+        return self.__buffer.read_lock
+    
+    def fileno(self) -> int:
+        raise OSError(f"{type(self).__name__} objects have no associated file descriptors")
+    
+    def close(self):
+        self.__buffer.close()
+
+    @property
+    def closed(self) -> bool:
+        return self.__buffer.closed
+    
+    def tell(self) -> int:
+        return self.__buffer.tell()
+    
+    def seekable(self) -> bool:
+        return False
+    
+    def read(self, size: int | float = float("inf")) -> bytes | bytearray | memoryview:
+        return self.__buffer.read(size)
+    
+    def readinto(self, buffer: bytearray | memoryview) -> int:
+        return self.__buffer.readinto(buffer)
+    
+    def readline(self, size: int | float = float("inf")) -> bytes | bytearray | memoryview:
+        return self.__buffer.readline(size)
+    
+    def dump(self, obj: Any) -> None:
+        """
+        Dumps the object into the stream. Waits for it to be completely dumped.
+        """
+        with self.__dump_method_lock:
+            if self.closed:
+                from .abc.io import IOClosedError
+                raise IOClosedError("Object has already been pickled")
+            if self.__ready.is_set():
+                raise RuntimeError("Pickler is already pickling an object")
+            self.__object = obj
+            self.__ready.set()
+        
+    
+
+
+
+class RestrictiveUnpickler(StreamUnpickler):
+    
+    """
+    This subclass of unpickler can only load object that have already been allowed.
+
+    The permission system lets you allow:
+     - single objects based on identity (using id, useful for function such as exec, print, etc.) using 'allow_object(obj)'.
+     - classes and their direct instances using 'allow_class(cls)'.
+     - class trees and their instances using 'allow_class_hierarchy(cls)'.
+    
+    You can also forbid classes directly or class trees and parts of a class tree can be allowed while others are forbidden.
+    For example, given the following class structure:
+    ```
+    A
+    └───B
+        ├───C
+        └───D
+            └───E
+                └───F
+                    └───G
+    ```
+    The following script:
+    >>> unp = RestrictiveUnpickler()
+    >>> unp.allow_class_hierarchy(A)
+    >>> unp.forbid_class_hierarchy(D)
+    >>> unp.allow_class_hierarchy(F)
+
+    would allow the classes A, B, C, F, G and all of their direct instances. (With each consecutive line the sets of allowed classes are : {}, {A, B, C, D, E, F, G}, {A, B, C}, {A, B, C, F, G}.)
+
+    You can also forbid a class and allow their hierarchy.
+    For example, with the previous class structure:
+    >>> unp = RestrictiveUnpickler()
+    >>> unp.allow_class_hierarchy(A)
+    >>> unp.forbid_class(A)
+
+    would allow all direct or indirect subclasses of A (and their instances) but not A itself (nor its instances).
+
+    Note that when a class inherits from multiple bases, and is not allowed itself, all of its bases must be allowed (directly or not).
+    Also note that you cannot forbid certain builtins classes, such as bytes, str, int, etc. They will be allowed by default but not their successors.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
         from typing import Any
-        self._wlist : Dict[tuple[str, str], Any] = {}
+        self.__object_whitelist : dict[int, Any] = {}
+        self.__class_whitelist : set[type] = set(self.base_classes)
+        self.__class_blacklist : set[type] = set()
+        self.__hierarchy_whitelist : set[type] = set()
+        self.__hierarchy_blacklist : set[type] = set()
+        self.allow(*self.base_classes)
+    
+    @property
+    def base_classes(self):
+        """
+        This is a tuple of classes which direct instances are unchangeably allowed by pickle.
+        """
+        return (type(None), bool, int, float, str, bytes, tuple, list, set, frozenset, dict)
 
-    def allow(self, *objects : Any):
+    def allow_object(self, object : Any):
         """
-        Allows one or multiple classes, functions, methods, etc. to be loaded by this instance of WhiteListUnpickler. 
+        Tries to allow an object for through this unpickler.
+        The object must belong to a module (must match a module using inspect.getmodule(object)) and be present in the module.
+        Note that testing is done with builtin function id(), thus allowing 'list(range(10))' would not necessarly work.
         """
-        from inspect import getmodule
-        added = {}
-        for object in objects:
-            mod = getmodule(object)
-            if mod == None:
-                raise ValueError("Object {} cannot be mapped to any containing module.".format(repr(object)))
-            obj_name = None
-            for name in dir(mod):
-                if getattr(mod, name) is object:
-                    obj_name = name
-                    break
-            if obj_name == None:
-                raise ValueError("Cannot find the name of object {} in module '{}'.".format(repr(object), mod.__name__))
-            added[(mod.__name__, obj_name)] = object
-        self._wlist.update(added)
+        self.__object_whitelist[id(object)] = object
+
+    def allow_class(self, cls : type):
+        """
+        Allows a class and its direct instances through this unpickler.
+        """
+        if not isinstance(cls, type):
+            raise TypeError(f"Expected class, got '{type(cls).__name__}'")
+        self.__class_whitelist.add(cls)
+        self.__class_blacklist.discard(cls)
     
-    def forbid(self, *objects : Any):
+    def allow_class_hierarchy(self, cls : type):
         """
-        Forbids one or multiple classes, functions, methods, etc. to be loaded by this instance of WhiteListUnpickler. 
+        Allows a class, its subclasses and its instances through this unpickler.
         """
-        from inspect import getmodule
-        removed = {}
-        for object in objects:
-            mod = getmodule(object)
-            if mod == None:
-                raise ValueError("Object {} cannot be mapped to any containing module.".format(repr(object)))
-            obj_name = None
-            for name in dir(mod):
-                if getattr(mod, name) is object:
-                    obj_name = name
-                    break
-            if obj_name == None:
-                raise ValueError("Cannot find the name of object {} in module '{}'.".format(repr(object), mod.__name__))
-            removed[(mod.__name__, obj_name)] = object
-        for entry, object in removed.items():
-            if entry not in self._wlist or self._wlist[entry] is not object:
-                raise KeyError("Object was already not allowed.")
-        for entry, object in removed.items():
-            self._wlist.pop(entry)
+        if not isinstance(cls, type):
+            raise TypeError(f"Expected class, got '{type(cls).__name__}'")
+        self.__hierarchy_whitelist.add(cls)
+        self.__hierarchy_blacklist.discard(cls)
+
+    def allow(self, *objects_or_classes : Any, hierarchical : bool = False):
+        """
+        Allows objects through this unpickler. If a given object is a class, its instances will also be allowed.
+        If hierarchical is True, any allowed class will see its subclass tree also allowed.
+        """
+        if not isinstance(hierarchical, bool):
+            raise TypeError(f"Expected bool for hierarchical, got '{type(hierarchical)}'")
+        for obj in objects_or_classes:
+            if isinstance(obj, type):
+                if hierarchical:
+                    self.allow_class_hierarchy(obj)
+                else:
+                    self.allow_class(obj)
+            else:
+                self.allow_object(obj)
+
+    def forbid_object(self, object : Any):
+        """
+        Forbids an object if it was allowed through this unpickler.
+        """
+        if id(object) in self.__object_whitelist:
+            self.__object_whitelist.pop(id(object))
     
-    def allowed(self) -> Iterator[Any]:
+    def forbid_class(self, cls : type):
         """
-        Iterates over all of the allowed objects.
+        Forbids a class and its direct instances through this unpickler if they were allowed.
         """
-        return iter(self._wlist.values())
+        if not isinstance(cls, type):
+            raise TypeError(f"Expected class, got '{type(cls).__name__}'")
+        if cls in self.base_classes:
+            raise ValueError(f"Cannot forbid builtin class '{cls.__name__}'")
+        self.__class_blacklist.add(cls)
+        self.__class_whitelist.discard(cls)
+    
+    def forbid_class_hierarchy(self, cls : type):
+        """
+        Forbids a class, its subclasses and its instances through this unpickler if they were allowed.
+        """
+        if not isinstance(cls, type):
+            raise TypeError(f"Expected class, got '{type(cls).__name__}'")
+        self.__hierarchy_blacklist.add(cls)
+        self.__hierarchy_whitelist.discard(cls)
+
+    def is_allowed(self, obj : Any) -> bool:
+        """
+        Returns True if the object would be allowed by this unpickler.
+        If the object is a class, its instances might also be allowed. Use 'is_class_allowed' to check if its instances would also be allowed.
+        """
+        if id(obj) in self.__object_whitelist:
+            return True
+        if isinstance(obj, type):
+            return self.is_class_allowed(obj)
+        return False
+    
+    def is_class_allowed(self, cls : type) -> bool:
+        """
+        Returns True if the class (and its instances) would be allowed by this unpickler.
+        """
+        if not isinstance(cls, type):
+            raise TypeError(f"Expected a class, got '{type(cls).__name__}'")
+        if cls in self.__class_whitelist:
+            return True
+        if cls in self.__class_blacklist:
+            return False
+        
+        def track_class(cls : type) -> bool:
+            """
+            Internal function that tells whether a class is allowed thanks to its base classes.
+            """
+            if cls in self.__hierarchy_whitelist:
+                return True
+            if cls in self.__hierarchy_blacklist:
+                return False
+            if not cls.__bases__:
+                return False    # By default, it is not allowed.
+            return all(track_class(b) for b in cls.__bases__)
+
+        return track_class(cls)
+    
+    def warrants(self, cls : type) -> list[type]:
+        """
+        Given a class, returns the list of classes that either allow or forbid this class (depending on if the class itself is allowed or forbidden).
+        """
+        if not isinstance(cls, type):
+            raise TypeError(f"Expected a class, got '{type(cls).__name__}'")
+        if cls in self.__class_whitelist or cls in self.__class_blacklist:
+            return [cls]
+        
+        allowed = self.is_class_allowed(cls)
+        
+        def track_class(cls : type) -> list[type]:
+            """
+            Internal function returns the warrants classes of a class.
+            """
+            if cls in self.__hierarchy_whitelist and allowed:
+                return [cls]
+            if cls in self.__hierarchy_blacklist and not allowed:
+                return [cls]
+            if not cls.__bases__:
+                return []       # By default, it has no warrants.
+            w = []
+            for b in cls.__bases__:
+                w.extend(track_class(b))
+            return w
+
+        return track_class(cls)
+
+
+    @property
+    def allowed_objects(self):
+        """
+        The set of allowed special objects.
+        """
+        return self.__object_whitelist.values()
+    
+    @property
+    def allowed_classes(self):
+        """
+        The set of allowed classes that currently exist in the interpreter.
+        Note that is a class is allowed by 'allow_class_hierarchy', some of its subclasses might not have been imported, and thus will not be listed here while still being allowed.
+        """
+        s : set[type] = set()
+        to_add : set[type] = self.__hierarchy_whitelist
+        while to_add:
+            new : set[type] = set()
+            for cls in to_add:
+                s.add(cls)
+                new.update(cls.__subclasses__())
+            to_add = new - s
+        s.update(self.__class_whitelist)
+        return s
 
     def find_class(self, __module_name: str, __global_name: str) -> Any:
-        if (__module_name, __global_name) not in self._wlist:
-            raise ForbiddenPickleError("Cannot import object '{}' from module '{}' as it is not on the unpickler's whitelist.".format(__global_name, __module_name))
         obj = super().find_class(__module_name, __global_name)
-        if obj != self._wlist[(__module_name, __global_name)]:
-            raise ForbiddenPickleError("Cannot import object '{}' from module '{}' as it is not on the unpickler's whitelist.".format(__global_name, __module_name))
+        if not self.is_allowed(obj):
+            if not isinstance(obj, type):
+                cls = type(obj)
+            else:
+                cls = obj
+            warrants = [c.__name__   for c in self.warrants(cls)]
+            if not warrants:
+                raise ForbiddenPickleError(f"'{obj}' is not allowed in the context of this {type(self).__name__} because it has no warrant classes and the object itself was not allowed")
+            else:
+                if len(warrants) == 1:
+                    text = f"because the class {warrants[0]} is not allowed"
+                else:
+                    text = "because the classes " + ", ".join(warrants[:-1]) + " and " + warrants[-1] + " are not allowed"
+                raise ForbiddenPickleError(f"'{obj}' is not allowed in the context of this {type(self).__name__} {text}")
         return obj
 
 
 
 
 
-class BlackListUnpickler(Unpickler):
+class SafeBuiltinsUnpickler(RestrictiveUnpickler):
 
     """
-    This subclass of unpickler can only load object that have not already been registered to their blacklist.
+    This class of unpickler is only able to load safe objects from the builtins module by default.
+    Other objects can still be allowed in instances using the methods of the RestrictiveUnpickler class.
     """
 
-    def __init__(self, file: BytesReader, *, fix_imports: bool = True, encoding: str = 'ASCII', errors: str = 'strict', buffers: Iterable[Any] | None = None) -> None:
-        super().__init__(file, fix_imports = fix_imports, encoding = encoding, errors = errors, buffers = buffers)
-        from typing import Any
-        self._blist : Dict[tuple[str, str], Any] = {}
+    def __init__(self) -> None:
+        super().__init__()
+        import builtins
+        safe_builtins = {name : getattr(builtins, name) for name in dir(builtins)}
+        forbidden_builtins = {
+            "eval",
+            "exec",
+        }
+        safe_builtins = {name : value for name, value in safe_builtins.items() if name not in forbidden_builtins}
+        self.allow(*safe_builtins.values())
 
-    def forbid(self, *objects : Any):
-        """
-        Forbids one or multiple classes, functions, methods, etc. to be loaded by this instance of WhiteListUnpickler. 
-        """
-        from inspect import getmodule
-        added = {}
-        for object in objects:
-            mod = getmodule(object)
-            if mod == None:
-                raise ValueError("Object {} cannot be mapped to any containing module.".format(repr(object)))
-            obj_name = None
-            for name in dir(mod):
-                if getattr(mod, name) is object:
-                    obj_name = name
-                    break
-            if obj_name == None:
-                raise ValueError("Cannot find the name of object {} in module '{}'.".format(repr(object), mod.__name__))
-            added[(mod.__name__, obj_name)] = object
-        self._blist.update(added)
+
+
+
+
+class WhiteListUnpickler(RestrictiveUnpickler):
+
+    """
+    This is the same as a RestrictiveUnpickler.
+    """
+
+
+
+
+
+class BlackListUnpickler(RestrictiveUnpickler):
     
-    def allow(self, *objects : Any):
-        """
-        Allows one or multiple classes, functions, methods, etc. to be loaded by this instance of WhiteListUnpickler. 
-        """
-        from inspect import getmodule
-        removed = {}
-        for object in objects:
-            mod = getmodule(object)
-            if mod == None:
-                raise ValueError("Object {} cannot be mapped to any containing module.".format(repr(object)))
-            obj_name = None
-            for name in dir(mod):
-                if getattr(mod, name) is object:
-                    obj_name = name
-                    break
-            if obj_name == None:
-                raise ValueError("Cannot find the name of object {} in module '{}'.".format(repr(object), mod.__name__))
-            removed[(mod.__name__, obj_name)] = object
-        for entry, object in removed.items():
-            if entry not in self._blist or self._blist[entry] is not object:
-                raise KeyError("Object was already not allowed.")
-        for entry, object in removed.items():
-            self._blist.pop(entry)
-    
-    def forbidden(self) -> Iterator[Any]:
-        """
-        Iterates over all of the forbidden objects.
-        """
-        return iter(self._blist.values())
+    """
+    This is a RestrictiveUnpickler which has the 'object' class allowed by default with all of its hierarchy.
+    This means that all classes are allowed by default.
+    """
 
-    def find_class(self, __module_name: str, __global_name: str) -> Any:
-        if (__module_name, __global_name) in self._blist:
-            raise ForbiddenPickleError("Cannot import object '{}' from module '{}' as it is on the unpickler's blacklist.".format(__global_name, __module_name))
-        obj = super().find_class(__module_name, __global_name)
-        if obj == self._blist[(__module_name, __global_name)]:
-            raise ForbiddenPickleError("Cannot import object '{}' from module '{}' as it is on the unpickler's blacklist.".format(__global_name, __module_name))
-        return obj
+    def __init__(self) -> None:
+        super().__init__()
+        self.allow_class_hierarchy(object)
 
 
 
 
 
-def safe_loads(data : bytes | bytearray | memoryview) -> Any:
+def safe_loads(data : bytes | bytearray | memoryview):
     """
     Loads given pickle using only safe builtins.
     """
     if not isinstance(data, bytes | bytearray | memoryview):
         raise TypeError("Expected readable buffer, got " + repr(type(data).__name__))
-    import builtins
-    import _sitebuiltins
-    from io import BytesIO
-    safe_builtins = [obj for obj in map(lambda x : getattr(builtins, x), dir(builtins)) if isinstance(obj, type)] + [abs, aiter, all, any, anext, ascii, bin, breakpoint, callable, chr, compile, delattr, dir, divmod, format, getattr, globals, hasattr, hash, _sitebuiltins._Helper, hex, id, input, isinstance, issubclass, iter, len, locals, max, min, next, oct, open, ord, pow, print, repr, round, setattr, sorted, sum, vars]
-    unpickler = WhiteListUnpickler(BytesIO(data))
-    unpickler.allow(*safe_builtins)
+
+    unpickler = SafeBuiltinsUnpickler()
+    unpickler << data
     return unpickler.load()
 
 
-def safe_load(file : BytesReader) -> Any:
+def safe_load(file : BytesReader):
     """
     Loads pickle from given file using only safe builtins.
     """
     from Viper.abc.io import BytesReader
     if not isinstance(file, BytesReader):
         raise TypeError("Expected readable byte-stream, got " + repr(type(file).__name__))
-    import builtins
-    import _sitebuiltins
-    safe_builtins = [obj for obj in map(lambda x : getattr(builtins, x), dir(builtins)) if isinstance(obj, type)] + [abs, aiter, all, any, anext, ascii, bin, breakpoint, callable, chr, compile, delattr, dir, divmod, format, getattr, globals, hasattr, hash, _sitebuiltins._Helper, hex, id, input, isinstance, issubclass, iter, len, locals, max, min, next, oct, open, ord, pow, print, repr, round, setattr, sorted, sum, vars]
-    unpickler = WhiteListUnpickler(file)
-    unpickler.allow(*safe_builtins)
-    return unpickler.load()
-
-
-
-
-
-class DumpOperator(FluxOperator):
     
-    """
-    This operator takes a pickable Python object as its source and writes its pickle in destination.
-    """
-
-    def __init__(self, source: Any, destination: BytesWriter, *, auto_close: bool = False) -> None:
-        from Viper.abc.io import BytesWriter
-        if not isinstance(destination, BytesWriter):
-            raise TypeError("Expected Any and BytesWriter, got " + repr(type(source).__name__) + " and " + repr(type(destination).__name__))
-        if not isinstance(auto_close, bool):
-            raise TypeError("Expected bool for auto_close, got " + repr(type(auto_close).__name__))
-
-        self.__source = source
-        self.__destination = destination
-        self.__auto_close = auto_close
-        self.__done = False
-    
-    @property
-    def source(self) -> Any:
-        """
-        The file to write in the output stream.
-        """
-        return self.__source
-    
-    @property
-    def destination(self) -> BytesWriter:
-        """
-        The output stream of the flux operator.
-        """
-        return self.__destination
-    
-    @property
-    def auto_close(self) -> bool:
-        """
-        If auto_close is True, the destination stream will be closed when the work of run() is finished.
-        """
-        return self.__auto_close
-    
-    def run(self):
-        from pickle import dump
-        from Viper.abc.io import IOClosedError
-        try:
-            dump(self.source, self.destination)
-        except IOClosedError as e:
-            raise RuntimeError("The destination stream got closed before the operator could finish writing its output") from e
-        self.__done = True
-        if self.auto_close:
-            self.destination.close()
-
-    @property
-    def finished(self) -> bool:
-        return self.__done
+    unpickler = SafeBuiltinsUnpickler()
+    return unpickler << file
 
 
 
 
 
-class UnsecureLoadOperator(FluxOperator):
-
-    """
-    This class loads (not securely) a Python object from the input stream.
-    """
-    
-    def __init__(self, source: BytesReader) -> None:
-        from Viper.abc.io import BytesReader
-        if not isinstance(source, BytesReader):
-            raise TypeError("Expected BytesReader, got " + repr(type(source).__name__))
-
-        from Viper.better_threading import Future
-        self.__source = source
-        self.__destination = Future()
-        self.__done = False
-    
-    @property
-    def source(self) -> Any:
-        """
-        The file to write in the output stream.
-        """
-        return self.__source
-    
-    @property
-    def destination(self) -> Future:
-        """
-        The Future object reconstructed from the pickle data.
-        """
-        return self.__destination
-    
-    @property
-    def auto_close(self) -> bool:
-        """
-        Not relevant in this context.
-        """
-        return True
-    
-    def run(self):
-        from pickle import load
-        from Viper.abc.io import IOClosedError
-        try:
-            obj = load(self.source)
-        except IOClosedError as e:
-            raise RuntimeError("The input stream got closed before the operator could finish reconstructing the object") from e
-        self.__done = True
-        self.destination.set(obj)
-
-    @property
-    def finished(self) -> bool:
-        return self.__done
-
-
-
-
-
-class SafeLoadOperator(UnsecureLoadOperator):
-
-    """
-    This version of the loading flux operator only uses the safe_load method.
-    """
-
-    def __init__(self, source: BytesReader) -> None:
-        from Viper.abc.io import BytesReader
-        if not isinstance(source, BytesReader):
-            raise TypeError("Expected BytesReader, got " + repr(type(source).__name__))
-
-        from Viper.better_threading import Future
-        self.__source = source
-        self.__destination = Future()
-        self.__done = False
-    
-    @property
-    def source(self) -> Any:
-        """
-        The file to write in the output stream.
-        """
-        return self.__source
-    
-    @property
-    def destination(self) -> Future:
-        """
-        The Future object reconstructed from the pickle data.
-        """
-        return self.__destination
-    
-    @property
-    def auto_close(self) -> bool:
-        """
-        Not relevant in this context.
-        """
-        return True
-    
-    def run(self):
-        from Viper.abc.io import IOClosedError
-        try:
-            obj = safe_load(self.source)
-        except IOClosedError as e:
-            raise RuntimeError("The input stream got closed before the operator could finish reconstructing the object") from e
-        except ForbiddenPickleError as e:
-            raise e.with_traceback(None) from None
-        self.__done = True
-        self.destination.set(obj)
-
-    @property
-    def finished(self) -> bool:
-        return self.__done
-
-
-
-
-
-del BytesReader, Unpickler, UnpicklingError, Any, Dict, Iterable, Iterator, VulnerabilityWarning, Future, pickle
+del pickle, wraps, Pickler, Unpickler, UnpicklingError, RLock, Any, BytesReader, BytesWriter, BytesBuffer, BUFFER_SIZE, VulnerabilityWarning
