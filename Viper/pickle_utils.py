@@ -48,7 +48,7 @@ def load(*args, **kwargs) -> Any:
     try:
         return _old_load(*args, **kwargs)
     except BaseException as e:
-        raise e from None
+        raise e
 
 pickle.load = load
 
@@ -60,7 +60,7 @@ def loads(*args, **kwargs) -> Any:
     try:
         return _old_loads(*args, **kwargs)
     except BaseException as e:
-        raise e from None
+        raise e
 
 pickle.loads = loads
 
