@@ -85,7 +85,7 @@ class Budget:
         - Sets its value to zero.
         - Sets internal flag to True, so threads waiting to acquire the budget will acquire it even if it is empty.
         """
-        with self.__lock, self.__op_lock:
+        with self.__op_lock:
             self.__closed = True
             self.__value = 0
             self.__positive_event.set()
