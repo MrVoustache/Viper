@@ -52,7 +52,7 @@ class Budget:
                 try:
                     zero_callback(self)
                 except:
-                    raise RuntimeError("Bugdet's callback got an exception when reaching zero") from None
+                    raise RuntimeError("Bugdet's callback got an exception when reaching zero")
 
     def remove_callback(self, zero_callback : Callable[["Budget"], None]):
         """
@@ -118,7 +118,7 @@ class Budget:
                             try:
                                 cb(self)
                             except:
-                                raise RuntimeError("Bugdet's callback got an exception when reaching zero") from None
+                                raise RuntimeError("Bugdet's callback got an exception when reaching zero")
             elif self.__value < val:
                 old_value, self.__value = self.__value, val
                 if old_value == 0:
@@ -218,7 +218,7 @@ class Budget:
                             try:
                                 cb(self)
                             except:
-                                raise RuntimeError("Bugdet's callback got an exception when reaching zero") from None
+                                raise RuntimeError("Bugdet's callback got an exception when reaching zero")
 
     def __add__(self, value : int):
         """
