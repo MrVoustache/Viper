@@ -17,34 +17,60 @@ class Budget:
     To take from the budget, you can acquire it like a lock.
     """
 
-    def __init__(self, init_value : int = 0, *, zero_callback : Callable[["Budget"], None] | None = None) -> None:
+    def __init__(self, init_value : int = 0) -> None:
         if not isinstance(init_value, int):
             raise TypeError(f"Expected int, got '{type(init_value).__name__}'")
         if init_value < 0:
             raise ValueError("Budget must have a non-negative value")
-        if zero_callback is not None and not callable(zero_callback):
-            raise TypeError(f"Expected callable for zero_callback, got '{type(zero_callback).__name__}'")
         from threading import RLock, Event
+        from typing import Callable
         self.__closed : bool = False
         self.__lock = RLock()
         self.__op_lock = RLock()
-        self.__callback = zero_callback
+        self.__callbacks : list[Callable[["Budget"], None]] = []
         with self.__lock, self.__op_lock:
             self.__value = init_value
             self.__positive_event = Event()
             if init_value > 0:
                 self.__positive_event.set()
-            elif self.__callback:
-                try:
-                    self.__callback(self)
-                except:
-                    raise RuntimeError("Bugdet's callback got an exception when reaching zero")
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self.__value})"
     
     def __str__(self) -> str:
         return str(self.__value)
+    
+    def add_callback(self, zero_callback : Callable[["Budget"], None]):
+        """
+        Adds a function to be called each time the Budget reaches zero.
+        """
+        if not callable(zero_callback):
+            raise TypeError(f"Expected callable for zero_callback, got '{type(zero_callback).__name__}'")
+        with self.lock:
+            self.__callbacks.append(zero_callback)
+            if self.value == 0:
+                try:
+                    zero_callback(self)
+                except:
+                    raise RuntimeError("Bugdet's callback got an exception when reaching zero") from None
+
+    def remove_callback(self, zero_callback : Callable[["Budget"], None]):
+        """
+        Removes a callback if it was registered.
+        Silently does nothing if there was no such callback.
+        """
+        if not callable(zero_callback):
+            raise TypeError(f"Expected callable for zero_callback, got '{type(zero_callback).__name__}'")
+        with self.lock:
+            if zero_callback in self.__callbacks:
+                self.__callbacks.remove(zero_callback)
+
+    @property
+    def callbacks(self):
+        """
+        The list of callback functions that are called each time the Budget reaches zero.
+        """
+        return self.__callbacks.copy()
     
     @property
     def closed(self):
@@ -88,11 +114,11 @@ class Budget:
                     self.__value = val
                     if self.__value == 0:
                         self.__positive_event.clear()
-                        if self.__callback:
+                        for cb in self.__callbacks:
                             try:
-                                self.__callback(self)
+                                cb(self)
                             except:
-                                raise RuntimeError("Bugdet's callback got an exception when reaching zero")
+                                raise RuntimeError("Bugdet's callback got an exception when reaching zero") from None
             elif self.__value < val:
                 old_value, self.__value = self.__value, val
                 if old_value == 0:
@@ -188,11 +214,11 @@ class Budget:
                     value -= old_value - self.__value
                     if self.__value == 0:
                         self.__positive_event.clear()
-                        if self.__callback:
+                        for cb in self.__callbacks:
                             try:
-                                self.__callback(self)
+                                cb(self)
                             except:
-                                raise RuntimeError("Bugdet's callback got an exception when reaching zero")
+                                raise RuntimeError("Bugdet's callback got an exception when reaching zero") from None
 
     def __add__(self, value : int):
         """
