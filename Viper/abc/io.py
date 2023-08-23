@@ -614,6 +614,16 @@ class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
             self.release()
 
     @property
+    @abstractmethod
+    def read_lock(self) -> RLock:
+        raise NotImplementedError
+    
+    @property
+    @abstractmethod
+    def write_lock(self) -> RLock:
+        raise NotImplementedError
+
+    @property
     def lock(self) -> "RLock | LockGroup":
         """
         Returns a lock group of the read lock and the write lock if they are different.
