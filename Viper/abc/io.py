@@ -521,11 +521,13 @@ class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
         Same for releasing.
         """
 
+        from threading import Lock, RLock
+        __types = (type(Lock()), type(RLock()))
+        del Lock, RLock
+
         def __init__(self, *locks : "Lock | RLock") -> None:
-            from threading import Lock, RLock
-            LType, RLType = type(Lock()), type(RLock())
             for l in locks:
-                if not isinstance(l, (LType, RLType)):
+                if not isinstance(l, self.__types):
                     raise TypeError(f"Expected lock-like object, got '{type(l).__name__}'")
             self.__locks = locks
         
