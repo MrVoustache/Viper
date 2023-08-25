@@ -65,10 +65,9 @@ class BytesIO(AbstractBytesIO):
         raise OSError("BytesIO objects are not associated to any system object.")
     
     def close(self):
-        with self.lock:
-            self.__writable.close()
-            self.__readable.close()
-            self.__closed = True
+        self.__writable.close()
+        self.__readable.close()
+        self.__closed = True
 
     @property
     def closed(self) -> bool:
@@ -286,10 +285,9 @@ class StringIO(AbstractStringIO):
         raise OSError("StringIO objects are not associated to any system object.")
     
     def close(self):
-        with self.lock:
-            self.__writable.close()
-            self.__readable.close()
-            self.__closed = True
+        self.__writable.close()
+        self.__readable.close()
+        self.__closed = True
 
     @property
     def closed(self) -> bool:
@@ -507,11 +505,10 @@ class BytesBuffer(AbstractBytesIO):
         raise OSError(f"{type(self).__name__} objects have no associated file descriptors")
     
     def close(self):
-        with self.write_lock:
-            self.__closed = True
-            self.__writable.close()
-            if not self.__readable:
-                self.__readable.close()
+        self.__closed = True
+        self.__writable.close()
+        if not self.__readable:
+            self.__readable.close()
         
     @property
     def closed(self) -> bool:
@@ -812,11 +809,10 @@ class StringBuffer(AbstractStringIO):
         raise OSError(f"{type(self).__name__} objects have no associated file descriptors")
     
     def close(self):
-        with self.write_lock:
-            self.__closed = True
-            self.__writable.close()
-            if not self.__readable:
-                self.__readable.close()
+        self.__closed = True
+        self.__writable.close()
+        if not self.__readable:
+            self.__readable.close()
         
     @property
     def closed(self) -> bool:

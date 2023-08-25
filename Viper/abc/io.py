@@ -364,8 +364,16 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
             return self
         except TypeError:
             return NotImplemented
-    
+        
+    @overload
+    def __rlshift__(self, buffer : "IOWriter[Buf, MutBuf]") -> None:
+        ...
+
+    @overload
     def __rlshift__(self : R, buffer : MutBuf) -> R:
+        ...
+    
+    def __rlshift__(self, buffer):
         """
         Implements buffer << self.
         Acts like C++ flux operators.
@@ -459,23 +467,50 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
         If the second operand is an instance of IOReader, it will read from it until no data is available from buffer.read().
         """
         if isinstance(buffer, IOReader):
+            available_for_read, available_for_write = 0, 0
+            acquired_reader, acquired_writer = False, False
             with self.write_lock, buffer.read_lock:
                 while True:
-                    with self.writable as available_for_write, buffer.readable as available_for_read:
+
+                    try:
+
+                        acquired_reader, acquired_writer = False, False
+                        while not acquired_reader or not acquired_writer:
+
+                            if not acquired_reader:
+                                acquired_reader = buffer.readable.acquire(timeout=0.001)
+
+                            if acquired_reader:
+                                available_for_read = buffer.readable.value
+                                if not available_for_read:
+                                    if not buffer.closed:
+                                        raise RuntimeError("Reading stream acquired with no data available and is not closed")
+                                    return
+                                
+                            if not acquired_writer:
+                                acquired_writer = self.writable.acquire(timeout=0.001)
+
+                            if acquired_writer:
+                                available_for_write = self.writable.value
+                                if not available_for_write:
+                                    if not self.closed:
+                                        raise RuntimeError("Writing stream acquired with no space available and is not closed")
+                                    return
+
                         available_for_write = min(available_for_write, STREAM_PACKET_SIZE)
                         available_for_read = min(available_for_read, STREAM_PACKET_SIZE)
-                        if not available_for_read:
-                            if not buffer.closed:
-                                raise RuntimeError("Reading stream acquired with no data available and is not closed")
-                            return
-                        if not available_for_write:
-                            if not self.closed:
-                                raise RuntimeError("Writing stream acquired with no space available and is not closed")
-                            return
+
                         packet = buffer.read(min(available_for_write, available_for_read))
                         n = self.write(packet)
                         if n < len(packet):
                             raise RuntimeError("Could not write all data to writing stream whereas it guaranteed it would fit")
+                        
+                    finally:
+                        if acquired_reader:
+                            buffer.readable.release()
+                        if acquired_writer:
+                            self.writable.release()
+                            
         else:
             try:
                 n = 0
