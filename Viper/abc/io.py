@@ -328,7 +328,15 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
                 except IOClosedError:
                     break
 
+    @overload
+    def __rshift__(self, buffer : "IOWriter[Buf, MutBuf]") -> None:
+        ...
+
+    @overload
     def __rshift__(self : R, buffer : MutBuf) -> R:
+        ...
+
+    def __rshift__(self, buffer):
         """
         Implements self >> buffer.
         Acts like C++ flux operators.
@@ -363,7 +371,7 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
             self.readinto(buffer)
             return self
         except TypeError:
-            return NotImplemented
+            return buffer << self
         
     @overload
     def __rlshift__(self, buffer : "IOWriter[Buf, MutBuf]") -> None:
@@ -520,7 +528,15 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
             except TypeError:
                 return NotImplemented
     
+    @overload
     def __rrshift__(self : W, buffer : Buf) -> W:
+        ...
+
+    @overload
+    def __rrshift__(self, buffer : IOReader[Buf, MutBuf]) -> None:
+        ...
+
+    def __rrshift__(self, buffer):
         """
         Implements buffer >> self.
         Acts like C++ flux operators.
