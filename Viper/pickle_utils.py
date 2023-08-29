@@ -88,7 +88,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
 
         def read(self, size: int) -> bytes:
             with self.read_lock:
-                self.writable.value = size
+                self.writable.value += size
                 result = super().read(size)
                 return result
             
@@ -98,7 +98,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
                 from .abc.io import STREAM_PACKET_SIZE
                 with self.read_lock:
                     while True:
-                        self.writable.value = STREAM_PACKET_SIZE
+                        self.writable.value += STREAM_PACKET_SIZE
                         result = super().readline(STREAM_PACKET_SIZE)
                         line.extend(result)
                         if result.endswith(b"\n"):
@@ -106,13 +106,13 @@ class StreamUnpickler(Unpickler, BytesWriter):
                             return bytes(line)
             else:
                 with self.read_lock:
-                    self.writable.value = size
+                    self.writable.value += size
                     result = super().readline(size)
                     return result
 
         def readinto(self, buffer: bytearray | memoryview) -> int:
             with self.read_lock:
-                self.writable.value = len(buffer)
+                self.writable.value += len(buffer)
                 result = super().readinto(buffer)
                 return result
         
