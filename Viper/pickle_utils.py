@@ -228,11 +228,16 @@ class StreamPickler(Pickler, BytesReader):
         self.__ready = Event()
         self.__dump_lock = Lock()
         self.__dump_method_lock = Lock()
+        self.__stated = Event()
+        self.__finished = Event()
+        self.__exception : None | BaseException = None
         super().__init__(self.__buffer, fix_imports=True)
         with self.__dump_lock:
             Thread(target=self.__dump, daemon=True, name="StreamPickler deconstructor thread").start()
             if args:
-                self.dump(args[0])
+                self.__object = args[0]
+                self.__ready.set()
+        self.__stated.wait()
 
     def __dump(self):
         """
@@ -242,9 +247,14 @@ class StreamPickler(Pickler, BytesReader):
             if self.closed:
                 from .abc.io import IOClosedError
                 raise IOClosedError("Object has already been pickled")
+            self.__stated.set()
             self.__ready.wait()
-            super().dump(self.__object)
+            try:
+                super().dump(self.__object)
+            except BaseException as e:
+                self.__exception = e
             self.close()
+            self.__finished.set()
 
     @property
     def lock(self) -> RLock:
@@ -252,6 +262,11 @@ class StreamPickler(Pickler, BytesReader):
     
     @property
     def readable(self):
+        if self.closed:
+            with self.__dump_lock:
+                if self.__exception:
+                    exc, self.__exception = self.__exception, None
+                    raise exc
         return self.__buffer.readable
     
     @property
@@ -275,13 +290,31 @@ class StreamPickler(Pickler, BytesReader):
         return False
     
     def read(self, size: int | float = float("inf")) -> bytes | bytearray | memoryview:
-        return self.__buffer.read(size)
+        try:
+            return self.__buffer.read(size)
+        finally:
+            with self.__dump_lock:
+                if self.__exception:
+                    exc, self.__exception = self.__exception, None
+                    raise exc
     
     def readinto(self, buffer: bytearray | memoryview) -> int:
-        return self.__buffer.readinto(buffer)
+        try:
+            return self.__buffer.readinto(buffer)
+        finally:
+            with self.__dump_lock:
+                if self.__exception:
+                    exc, self.__exception = self.__exception, None
+                    raise exc
     
     def readline(self, size: int | float = float("inf")) -> bytes | bytearray | memoryview:
-        return self.__buffer.readline(size)
+        try:
+            return self.__buffer.readline(size)
+        finally:
+            with self.__dump_lock:
+                if self.__exception:
+                    exc, self.__exception = self.__exception, None
+                    raise exc
     
     def dump(self, obj: Any) -> None:
         """
@@ -295,6 +328,11 @@ class StreamPickler(Pickler, BytesReader):
                 raise RuntimeError("Pickler is already pickling an object")
             self.__object = obj
             self.__ready.set()
+            self.__finished.wait()
+        with self.__dump_lock:
+            if self.__exception:
+                exc, self.__exception = self.__exception, None
+                raise exc
         
     
 
