@@ -93,6 +93,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
                 return result
             
         def readline(self, size: int | None = None) -> bytes:
+            raise NotImplementedError("'readline' is not supported yet by StreamUnpicklers")
             if size is None:    # We have to read an entire line, no matter how long it is.
                 line = bytearray()
                 from .abc.io import STREAM_PACKET_SIZE
