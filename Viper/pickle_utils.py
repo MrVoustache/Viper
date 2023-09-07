@@ -137,12 +137,15 @@ class StreamUnpickler(Unpickler, BytesWriter):
 
     def __init__(self) -> None:
         from threading import Event, Lock, Thread
+        from pickle import Unpickler
+        from .abc.io import BytesWriter
         self.__buffer = self.__ReaderRegulatedBuffer()
         self.__object = None
         self.__ready = Event()
         self.__exception = None
         self.__load_lock = Lock()
-        super().__init__(self.__buffer, fix_imports=True, encoding="ASCII", errors="strict", buffers=None)      # Let's not care about Python 2
+        Unpickler.__init__(self, self.__buffer, fix_imports=True, encoding="ASCII", errors="strict", buffers=None)      # Let's not care about Python 2
+        BytesWriter.__init__(self)
         with self.__load_lock:
             Thread(target=self.__load, daemon=True, name="StreamUnpickler reconstructor thread").start()
 
@@ -233,13 +236,15 @@ class StreamPickler(Pickler, BytesReader):
         "__dump_lock" : "A lock that ensures exclusivity of the pickler process.",
         "__dump_method_lock" : "A lock that ensures that setting the object to pickle is a one-time operation.",
         "__started" : "An event that is set when the pickling thread has started.",
-        "__finished" : "An event that is set when the pickling thread finished (or crashes)."
+        "__finished" : "An event that is set when the pickling thread finished (or crashes).",
         "__exception" : "An eventual exception that occured in the unpickling thread.",
     }
 
     def __init__(self, *args) -> None:
         from threading import Event, Lock, Thread
         from .io import BytesBuffer
+        from pickle import Pickler
+        from .abc.io import BytesReader
         if len(args) > 1:
             raise ValueError("Expected at most one argument : the object to pickle")
         self.__buffer = BytesBuffer()
@@ -250,7 +255,8 @@ class StreamPickler(Pickler, BytesReader):
         self.__started = Event()
         self.__finished = Event()
         self.__exception : None | BaseException = None
-        super().__init__(self.__buffer, fix_imports=True)
+        Pickler.__init__(self, self.__buffer, fix_imports=True)
+        BytesReader.__init__(self)
         with self.__dump_lock:
             Thread(target=self.__dump, daemon=True, name="StreamPickler deconstructor thread").start()
             if args:

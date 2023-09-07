@@ -119,9 +119,9 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
     This class describes basic methods required for most types of streams interfaces.
     """
 
-    __slots__ = {
-        "__weakref__" : "A placeholder for an eventual weak reference."
-    }
+    # __slots__ = {
+    #     "__weakref__" : "A placeholder for an eventual weak reference."
+    # }
 
     @property
     @abstractmethod
@@ -266,23 +266,23 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
 
     from threading import RLock as __RLock
 
-    __slots__ = {
-        "__lock" : "A lock for the IOReader."
-    }
+    # __slots__ = {
+    #     "__rlock" : "A lock for the IOReader."
+    # }
 
     def __init__(self) -> None:
-        self.__lock = self.__RLock()
+        self.__rlock = self.__RLock()
 
     @property
     def lock(self) -> RLock:
-        return self.__lock
+        return self.__rlock
 
     @property
     def read_lock(self) -> RLock:
         """
         An RLock for getting exclusivity on reading operations.
         """
-        return self.__lock
+        return self.__rlock
     
     @property
     def writable(self) -> Budget:
@@ -420,23 +420,23 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
 
     from threading import RLock as __RLock
 
-    __slots__ = {
-        "__lock" : "A lock for the IOWriter."
-    }
+    # __slots__ = {
+    #     "__wlock" : "A lock for the IOWriter."
+    # }
 
     def __init__(self) -> None:
-        self.__lock = self.__RLock()
+        self.__wlock = self.__RLock()
 
     @property
     def lock(self) -> RLock:
-        return self.__lock
+        return self.__wlock
 
     @property
     def write_lock(self) -> RLock:
         """
         An RLock for getting exclusivity on writing operations.
         """
-        return self.__lock
+        return self.__wlock
     
     @property
     def readable(self) -> Budget:
@@ -583,6 +583,10 @@ class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
     """
     This class describes an interface for complete IO interactions with a stream.
     """
+
+    def __init__(self) -> None:
+        IOReader.__init__(self)
+        IOWriter.__init__(self)
 
     @property
     @abstractmethod

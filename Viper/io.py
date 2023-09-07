@@ -466,6 +466,7 @@ class BytesBuffer(AbstractBytesIO):
             raise TypeError(f"Expected int, got '{type(size).__name__}'")
         if size <= 0:
             raise ValueError(f"Expected positive nonzero integer for buffer size, got {size}")
+        super().__init__()
         from .abc.utils import Budget
         self.__buffer = bytearray(size)
         self.__start = 0
@@ -769,6 +770,7 @@ class StringBuffer(AbstractStringIO):
             raise TypeError(f"Expected int, got '{type(size).__name__}'")
         if size <= 0:
             raise ValueError(f"Expected positive nonzero integer for buffer size, got {size}")
+        super().__init__()
         from .abc.utils import Budget
         self.__buffer = bytearray(size)
         self.__extra = b""
