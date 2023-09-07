@@ -119,6 +119,10 @@ class IOBase(Generic[Buf, MutBuf], metaclass = ABCMeta):
     This class describes basic methods required for most types of streams interfaces.
     """
 
+    __slots__ = {
+        "__weakref__" : "A placeholder for an eventual weak reference."
+    }
+
     @property
     @abstractmethod
     def lock(self) -> RLock:
@@ -260,12 +264,25 @@ class IOReader(IOBase, Generic[Buf, MutBuf]):
     This class describes an interface for reading from a stream.
     """
 
+    from threading import RLock as __RLock
+
+    __slots__ = {
+        "__lock" : "A lock for the IOReader."
+    }
+
+    def __init__(self) -> None:
+        self.__lock = self.__RLock()
+
+    @property
+    def lock(self) -> RLock:
+        return self.__lock
+
     @property
     def read_lock(self) -> RLock:
         """
-        An alias for self.lock.
+        An RLock for getting exclusivity on reading operations.
         """
-        return self.lock
+        return self.__lock
     
     @property
     def writable(self) -> Budget:
@@ -401,12 +418,25 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
     This class describes an interface for writing to a stream.
     """
 
+    from threading import RLock as __RLock
+
+    __slots__ = {
+        "__lock" : "A lock for the IOWriter."
+    }
+
+    def __init__(self) -> None:
+        self.__lock = self.__RLock()
+
+    @property
+    def lock(self) -> RLock:
+        return self.__lock
+
     @property
     def write_lock(self) -> RLock:
         """
-        An alias for self.lock.
+        An RLock for getting exclusivity on writing operations.
         """
-        return self.lock
+        return self.__lock
     
     @property
     def readable(self) -> Budget:
@@ -665,16 +695,6 @@ class IO(IOReader[Buf, MutBuf], IOWriter[Buf, MutBuf]):
             Implements with self.
             """
             self.release()
-
-    @property
-    @abstractmethod
-    def read_lock(self) -> RLock:
-        raise NotImplementedError
-    
-    @property
-    @abstractmethod
-    def write_lock(self) -> RLock:
-        raise NotImplementedError
 
     @property
     def lock(self) -> "RLock | LockGroup":

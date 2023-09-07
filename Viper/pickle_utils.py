@@ -125,7 +125,15 @@ class StreamUnpickler(Unpickler, BytesWriter):
 
 
 
+    from .abc.io import IOClosedError as __IOClosedError, IOReader as __IOReader
 
+    __slots__ = {
+        "__buffer" : "The internal buffer storing data to unpickle.",
+        "__object" : "A placeholder for the unpickled object.",
+        "__ready" : "An event that is set when the unpickling process finishes (or crashes).",
+        "__exception" : "An eventual exception that occured in the unpickling thread.",
+        "__load_lock" : "A lock on the internal load function to avoid loading the same data simultenously."
+    }
 
     def __init__(self) -> None:
         from threading import Event, Lock, Thread
@@ -144,8 +152,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
         """
         with self.__load_lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError("Object has already been loaded")
+                raise self.__IOClosedError("Object has already been loaded")
             if self.__ready.is_set():
                 return self.__object
             try:
@@ -200,8 +207,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
         return self.__object
     
     def __lshift__(self, other):
-        from .abc.io import IOReader
-        if isinstance(other, IOReader):
+        if isinstance(other, self.__IOReader):
             super().__lshift__(other)
             return self.load()
         else:
@@ -218,6 +224,18 @@ class StreamPickler(Pickler, BytesReader):
     Note that the pickling process is done in background : data can be read immediately from this stream.
     """        
 
+    from .abc.io import IOClosedError as __IOClosedError, IOReader as __IOReader
+
+    __slots__ = {
+        "__buffer" : "The internal buffer storing the pickled data.",
+        "__object" : "A placeholder for the object to pickle.",
+        "__ready" : "An event that is set when the pickling process can start.",
+        "__dump_lock" : "A lock that ensures exclusivity of the pickler process.",
+        "__dump_method_lock" : "A lock that ensures that setting the object to pickle is a one-time operation.",
+        "__started" : "An event that is set when the pickling thread has started.",
+        "__finished" : "An event that is set when the pickling thread finished (or crashes)."
+        "__exception" : "An eventual exception that occured in the unpickling thread.",
+    }
 
     def __init__(self, *args) -> None:
         from threading import Event, Lock, Thread
@@ -229,7 +247,7 @@ class StreamPickler(Pickler, BytesReader):
         self.__ready = Event()
         self.__dump_lock = Lock()
         self.__dump_method_lock = Lock()
-        self.__stated = Event()
+        self.__started = Event()
         self.__finished = Event()
         self.__exception : None | BaseException = None
         super().__init__(self.__buffer, fix_imports=True)
@@ -238,7 +256,7 @@ class StreamPickler(Pickler, BytesReader):
             if args:
                 self.__object = args[0]
                 self.__ready.set()
-        self.__stated.wait()
+        self.__started.wait()
 
     def __dump(self):
         """
@@ -248,7 +266,7 @@ class StreamPickler(Pickler, BytesReader):
             if self.closed:
                 from .abc.io import IOClosedError
                 raise IOClosedError("Object has already been pickled")
-            self.__stated.set()
+            self.__started.set()
             self.__ready.wait()
             try:
                 super().dump(self.__object)

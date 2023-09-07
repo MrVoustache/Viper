@@ -24,6 +24,16 @@ class BytesIO(AbstractBytesIO):
     They are thread-safe.
     """
 
+    from .abc.io import IOClosedError as __IOClosedError
+
+    __slots__ = {
+        "__buffer" : "The internal buffer storing the stream.",
+        "__pos" : "The current cursor pos in the stream.",
+        "__closed" : "A boolean indicating if the stream has been closed.",
+        "__readable" : "The readable Budget.",
+        "__writable" : "The writable Budget."
+    }
+
     def __init__(self, initial_data : bytes | bytearray | memoryview = b"") -> None:
         if not isinstance(initial_data, bytes | bytearray | memoryview):
             raise TypeError(f"Expected readable buffer, got '{type(initial_data).__name__}'")
@@ -35,39 +45,22 @@ class BytesIO(AbstractBytesIO):
         self.__closed : bool = False
         self.__readable = Budget()
         self.__writable = Budget(STREAM_PACKET_SIZE)
-        self.__lock = self.LockGroup(self.__readable.lock, self.__writable.lock)
-
-    @property
-    def lock(self):
-        return self.__lock
     
     @property
     def readable(self):
-        if self.closed:
-            self.__readable.value = 0
-        else:
-            self.__readable.value = max(0, len(self.__buffer) - self.__pos)
         return self.__readable
-    
-    @property
-    def read_lock(self) -> RLock:
-        return self.__readable.lock
     
     @property
     def writable(self):
         return self.__writable
-    
-    @property
-    def write_lock(self) -> RLock:
-        return self.__writable.lock
 
     def fileno(self) -> int:
         raise OSError("BytesIO objects are not associated to any system object.")
     
     def close(self):
+        self.__closed = True
         self.__writable.close()
         self.__readable.close()
-        self.__closed = True
 
     @property
     def closed(self) -> bool:
@@ -75,8 +68,7 @@ class BytesIO(AbstractBytesIO):
     
     def tell(self) -> int:
         if self.closed:
-            from .abc.io import IOClosedError
-            raise IOClosedError(f"{type(self).__name__} is closed")
+            raise self.__IOClosedError(f"{type(self).__name__} is closed")
         return self.__pos
     
     def seekable(self) -> bool:
@@ -90,8 +82,7 @@ class BytesIO(AbstractBytesIO):
             raise ValueError(f"invalid whence ({whence}, should be {SEEK_SET}, {SEEK_CUR} or {SEEK_END})")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             if whence == SEEK_SET:
                 pos = offset
             elif whence == SEEK_CUR:
@@ -113,8 +104,7 @@ class BytesIO(AbstractBytesIO):
             raise ValueError(f"Expected positive integer, got {size}")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             if len(self.__buffer) < size:
                 self.__buffer.extend(b"\0" * (size - len(self.__buffer)))
                 self.__readable.value = len(self.__buffer) - self.__pos
@@ -127,8 +117,7 @@ class BytesIO(AbstractBytesIO):
             raise TypeError(f"Expected readable buffer, got '{type(data).__name__}'")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             if self.__pos > len(self.__buffer):
                 self.__buffer.extend(b"\0" * (self.__pos - len(self.__buffer)))
             self.__buffer[self.__pos : self.__pos + len(data)] = data
@@ -145,8 +134,7 @@ class BytesIO(AbstractBytesIO):
             total_size = size
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             data = bytes(self.__buffer[self.__pos : min(len(self.__buffer), self.__pos + total_size)])
             self.__pos += len(data)
             self.__readable.value = len(self.__buffer) - self.__pos
@@ -157,8 +145,7 @@ class BytesIO(AbstractBytesIO):
             raise TypeError(f"Expected writable buffer, got '{type(buffer).__name__}'")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             data = self.read(len(buffer))
             buffer[:len(data)] = data
             return len(data)
@@ -172,8 +159,7 @@ class BytesIO(AbstractBytesIO):
             total_size = size
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             try:
                 i = self.__buffer.index(b"\n", self.__pos, min(len(self.__buffer), self.__pos + total_size))        # type: ignore Until we have Literal inf...
                 data = bytes(memoryview(self.__buffer)[self.__pos : i + 1])
@@ -196,6 +182,18 @@ class StringIO(AbstractStringIO):
     They are thread-safe.
     """
 
+    from .abc.io import IOClosedError as __IOClosedError
+
+    __slots__ = {
+        "__buffer" : "The internal buffer storing the stream.",
+        "__bytes_pos" : "The current cursor pos in the stream.",
+        "__str_pos" : "The current position in the Unicode domain.",
+        "__closed" : "A boolean indicating if the stream has been closed.",
+        "__readable" : "The readable Budget.",
+        "__writable" : "The writable Budget.",
+        "__str_len" : "The size of the stream in the Unicode domain."
+    }
+
     def __init__(self, initial_data : str = "") -> None:
         if not isinstance(initial_data, str):
             raise TypeError(f"Expected str, got '{type(initial_data).__name__}'")
@@ -209,7 +207,6 @@ class StringIO(AbstractStringIO):
         self.__str_len : int = len(initial_data)
         self.__readable = Budget()
         self.__writable = Budget(STREAM_PACKET_SIZE)
-        self.__lock = self.LockGroup(self.__readable.lock, self.__writable.lock)
 
     def __parallel_walker(self, start : int = 0) -> Iterator[tuple[int, int]]:
         """
@@ -260,22 +257,10 @@ class StringIO(AbstractStringIO):
             else:
                 raise RuntimeError("Got lost in the encoding...")
         return bytes_pos
-
-    @property
-    def lock(self):
-        return self.__lock
-    
-    @property
-    def read_lock(self) -> RLock:
-        return self.__readable.lock
     
     @property
     def readable(self):
         return self.__readable
-    
-    @property
-    def write_lock(self) -> RLock:
-        return self.__writable.lock
     
     @property
     def writable(self):
@@ -285,9 +270,9 @@ class StringIO(AbstractStringIO):
         raise OSError("StringIO objects are not associated to any system object.")
     
     def close(self):
+        self.__closed = True
         self.__writable.close()
         self.__readable.close()
-        self.__closed = True
 
     @property
     def closed(self) -> bool:
@@ -295,8 +280,7 @@ class StringIO(AbstractStringIO):
     
     def tell(self) -> int:
         if self.closed:
-            from .abc.io import IOClosedError
-            raise IOClosedError(f"{type(self).__name__} is closed")
+            raise self.__IOClosedError(f"{type(self).__name__} is closed")
         return self.__str_pos
     
     def seekable(self) -> bool:
@@ -311,8 +295,7 @@ class StringIO(AbstractStringIO):
         
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             if whence == SEEK_SET:
                 final_str_pos = offset
@@ -338,8 +321,7 @@ class StringIO(AbstractStringIO):
             raise ValueError(f"Expected positive integer, got {size}")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             bytes_pos = self.__str_pos_to_bytes_pos(size)
             if len(self.__buffer) < bytes_pos:
                 self.__buffer.extend(b"\0" * (bytes_pos - len(self.__buffer)))
@@ -353,8 +335,7 @@ class StringIO(AbstractStringIO):
             raise TypeError(f"Expected str, got '{type(data).__name__}'")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             if self.__bytes_pos > len(self.__buffer):
                 self.__buffer.extend(b"\0" * (self.__bytes_pos - len(self.__buffer)))
             str_start, str_end = self.__str_pos, self.__str_pos + len(data)             # String positions are the same by definition
@@ -383,8 +364,7 @@ class StringIO(AbstractStringIO):
             raise ValueError(f"Expected positive integer, got {size}")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             bytes_start = self.__bytes_pos
             bytes_end = bytes_start
             for bytes_pos, str_pos in self.__parallel_walker(self.__bytes_pos):
@@ -417,8 +397,7 @@ class StringIO(AbstractStringIO):
         i = 0
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             writer = getincrementalencoder(encoding)()
             for char in reader():
                 encoded_char = writer.encode(char)
@@ -437,8 +416,7 @@ class StringIO(AbstractStringIO):
             raise ValueError(f"Expected positive integer, got {size}")
         with self.lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             bytes_start = self.__bytes_pos
             bytes_end = bytes_start
             last_bytes_pos = -1
@@ -470,7 +448,18 @@ class BytesBuffer(AbstractBytesIO):
     - They are not seekable.
     - Their internal buffer is circular and have a fixed size.
     - Closing first acts on the writing end : you will still be able to read the remaining data. Check the readable attribute to know if reading is still possible.
-    """        
+    """
+
+    from .abc.io import IOClosedError as __IOClosedError
+
+    __slots__ = {
+        "__buffer" : "The internal buffer storing the stream.",
+        "__start" : "The absolute position of the reading cursor in the stream.",
+        "__end" : "The absolute position of the writing cursor in the stream.",
+        "__closed" : "A boolean indicating if the stream has been closed.",
+        "__readable" : "The readable Budget.",
+        "__writable" : "The writable Budget."
+    }
 
     def __init__(self, size : int = BUFFER_SIZE) -> None:
         if not isinstance(size, int):
@@ -485,14 +474,6 @@ class BytesBuffer(AbstractBytesIO):
         self.__writable = Budget(size)
         self.__closed : bool = False
 
-    @property
-    def read_lock(self) -> RLock:
-        return self.__readable.lock
-
-    @property
-    def write_lock(self) -> RLock:
-        return self.__writable.lock
-    
     @property
     def readable(self):
         return self.__readable
@@ -536,8 +517,7 @@ class BytesBuffer(AbstractBytesIO):
         done = 0
         with self.write_lock:
             if self.closed and not self.__writable:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             while done < len(data):
 
@@ -578,8 +558,7 @@ class BytesBuffer(AbstractBytesIO):
         read = 0
         with self.read_lock:
             if self.closed and not self.__readable:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             while read < size:
 
@@ -618,8 +597,7 @@ class BytesBuffer(AbstractBytesIO):
         read = 0
         with self.read_lock:
             if self.closed and not self.__readable:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             while read < size:
 
@@ -663,8 +641,7 @@ class BytesBuffer(AbstractBytesIO):
         read = 0
         with self.read_lock:
             if self.closed and not self.__readable:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             while read < size:
 
@@ -717,6 +694,19 @@ class StringBuffer(AbstractStringIO):
     - Their internal buffer is circular and have a fixed size. Small additional space may be allocated for complex encodings.
     - Closing first acts on the writing end : you will still be able to read the remaining data. Check the readable attribute to know if reading is still possible.
     """
+
+    from .abc.io import IOClosedError as __IOClosedError
+
+    __slots__ = {
+        "__buffer" : "The internal buffer storing the stream.",
+        "__start" : "The absolute position of the reading cursor in the stream.",
+        "__end" : "The absolute position of the writing cursor in the stream.",
+        "__extra" : "A buffer that will store some extra data that could not fit in the stream due to larger encodings.",
+        "__closed" : "A boolean indicating if the stream has been closed.",
+        "__readable" : "The readable Budget.",
+        "__writable" : "The writable Budget.",
+        "__total" : "The total amount of characters written in the Unicode domain."
+    }
     
     @staticmethod
     def __incremental_chunck_decoder(maxsize : int | float, stop_at_newline : bool) -> Generator[tuple[int, str], bytes, None]:
@@ -788,14 +778,6 @@ class StringBuffer(AbstractStringIO):
         self.__writable = Budget(size)
         self.__closed : bool = False
         self.__total = 0
-
-    @property
-    def read_lock(self) -> RLock:
-        return self.__readable.lock
-
-    @property
-    def write_lock(self) -> RLock:
-        return self.__writable.lock
     
     @property
     def readable(self):
@@ -820,8 +802,7 @@ class StringBuffer(AbstractStringIO):
     
     def tell(self) -> int:
         if self.closed:
-            from .abc.io import IOClosedError
-            raise IOClosedError(f"{type(self).__name__} is closed")
+            raise self.__IOClosedError(f"{type(self).__name__} is closed")
         return self.__total
     
     def seekable(self) -> bool:
@@ -841,8 +822,7 @@ class StringBuffer(AbstractStringIO):
         done = 0
         with self.write_lock:
             if self.closed:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             while done < len(data):
 
@@ -906,8 +886,7 @@ class StringBuffer(AbstractStringIO):
         read = 0
         with self.read_lock:
             if self.closed and self.__start == self.__end:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             read_generator = self.__incremental_chunck_decoder(size, False)
             next(read_generator)
@@ -955,8 +934,7 @@ class StringBuffer(AbstractStringIO):
         read = 0
         with self.read_lock:
             if self.closed and self.__start == self.__end:
-                from .abc.io import IOClosedError
-                raise IOClosedError(f"{type(self).__name__} is closed")
+                raise self.__IOClosedError(f"{type(self).__name__} is closed")
             
             read_generator = self.__incremental_chunck_decoder(size, True)
             next(read_generator)
