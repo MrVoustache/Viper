@@ -7,7 +7,6 @@ from io import SEEK_CUR, SEEK_END, SEEK_SET
 from threading import Lock, RLock
 from typing import Generic, Iterable, Iterator, MutableSequence, Never, Optional, Protocol, Sequence, SupportsIndex, TypeVar, overload, runtime_checkable
 
-from Viper.abc.utils import Budget
 from .utils import Budget
 
 __all__ = ["IOClosedError", "IOBase", "IOReader", "IOWriter", "IO"]
