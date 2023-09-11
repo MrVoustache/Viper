@@ -154,7 +154,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
         Internal function used to reconstruct the object.
         """
         with self.__load_lock:
-            if self.closed:
+            if self.readable.closed:
                 raise self.__IOClosedError("Object has already been loaded")
             if self.__ready.is_set():
                 return self.__object
@@ -212,6 +212,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
     def __lshift__(self, other):
         if isinstance(other, self.__IOReader):
             super().__lshift__(other)
+            self.close()
             return self.load()
         else:
             return super().__lshift__(other)
