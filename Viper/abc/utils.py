@@ -15,6 +15,7 @@ class Budget:
     """
     This class represents a ressource that can be increased or decreased, but that must stay positive.
     To take from the budget, you can acquire it like a lock.
+    Closing the Budget will make it impossible to increase again.
     """
 
     def __init__(self, init_value : int = 0) -> None:
@@ -87,7 +88,6 @@ class Budget:
         """
         with self.__op_lock:
             self.__closed = True
-            self.__value = 0
             self.__positive_event.set()
     
     @property
@@ -107,21 +107,22 @@ class Budget:
         if val < 0:
             raise ValueError("Budget must have a non-negative value")
         with self.__op_lock:
-            if self.closed:
-                raise RuntimeError("Budget is closed")
             if self.__value > val:
                 with self:
                     self.__value = val
                     if self.__value == 0:
-                        self.__positive_event.clear()
+                        if not self.closed:
+                            self.__positive_event.clear()
                         for cb in self.__callbacks:
                             try:
                                 cb(self)
                             except:
                                 raise RuntimeError("Bugdet's callback got an exception when reaching zero")
             elif self.__value < val:
+                if self.closed:
+                    raise RuntimeError("Budget is closed")
                 old_value, self.__value = self.__value, val
-                if old_value == 0:
+                if old_value == 0 and not self.closed:
                     self.__positive_event.set()
     
     @property
@@ -206,14 +207,13 @@ class Budget:
         if value <= 0:
             raise ValueError(f"Expected a positive nonzero value, got {value}")
         with self:
-            if self.closed:
-                raise RuntimeError("Budget is closed")
             while value > 0:
                 with self.__op_lock:
                     old_value, self.__value = self.__value, max(self.__value - value, 0)
                     value -= old_value - self.__value
                     if self.__value == 0:
-                        self.__positive_event.clear()
+                        if not self.closed:
+                            self.__positive_event.clear()
                         for cb in self.__callbacks:
                             try:
                                 cb(self)
