@@ -59,8 +59,8 @@ class BytesIO(AbstractBytesIO):
     
     def close(self):
         self.__closed = True
-        self.__writable.close()
-        self.__readable.close()
+        self.__writable.close(erase = True)
+        self.__readable.close(erase = True)
 
     @property
     def closed(self) -> bool:
@@ -271,8 +271,8 @@ class StringIO(AbstractStringIO):
     
     def close(self):
         self.__closed = True
-        self.__writable.close()
-        self.__readable.close()
+        self.__writable.close(erase = True)
+        self.__readable.close(erase = True)
 
     @property
     def closed(self) -> bool:
@@ -488,9 +488,8 @@ class BytesBuffer(AbstractBytesIO):
     
     def close(self):
         self.__closed = True
-        self.__writable.close()
-        if not self.__readable:
-            self.__readable.close()
+        self.__writable.close(erase = True)
+        self.__readable.close()
         
     @property
     def closed(self) -> bool:
@@ -794,9 +793,8 @@ class StringBuffer(AbstractStringIO):
     
     def close(self):
         self.__closed = True
-        self.__writable.close()
-        if not self.__readable:
-            self.__readable.close()
+        self.__writable.close(erase = True)
+        self.__readable.close()
         
     @property
     def closed(self) -> bool:
