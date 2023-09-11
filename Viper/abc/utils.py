@@ -80,15 +80,18 @@ class Budget:
         """
         return self.__closed
     
-    def close(self):
+    def close(self, *, erase : bool = True):
         """
         Closes the budget:
-        - Sets its value to zero.
+        - Sets its value to zero if erase is True.
         - Sets internal flag to True, so threads waiting to acquire the budget will acquire it even if it is empty.
         """
+        if not isinstance(erase, bool):
+            raise TypeError(f"Expected bool for erase, got '{type(erase).__name__}'")
         with self.__op_lock:
             self.__closed = True
             self.__positive_event.set()
+            self.value = 0
     
     @property
     def value(self) -> int:
