@@ -91,7 +91,8 @@ class Budget:
         with self.__op_lock:
             self.__closed = True
             self.__positive_event.set()
-            self.value = 0
+            if erase:
+                self.value = 0
     
     @property
     def value(self) -> int:
