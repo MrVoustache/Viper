@@ -118,7 +118,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
                 return result
         
         def write(self, data: bytes | bytearray | memoryview) -> int:
-            with self.writable:
+            with self.write_lock:
                 result = super().write(data)
                 self.writable.value = max(0, self.writable.value - result)
                 return result
@@ -228,8 +228,6 @@ class StreamPickler(Pickler, BytesReader):
     Note that the pickling process is done in background : data can be read immediately from this stream.
     """        
 
-    from .abc.io import IOClosedError as __IOClosedError, IOReader as __IOReader
-
     __slots__ = {
         "__buffer" : "The internal buffer storing the pickled data.",
         "__object" : "A placeholder for the object to pickle.",
@@ -256,8 +254,8 @@ class StreamPickler(Pickler, BytesReader):
         self.__started = Event()
         self.__finished = Event()
         self.__exception : None | BaseException = None
-        Pickler.__init__(self, self.__buffer, fix_imports=True)
         BytesReader.__init__(self)
+        Pickler.__init__(self, self.__buffer, fix_imports=True)
         with self.__dump_lock:
             Thread(target=self.__dump, daemon=True, name="StreamPickler deconstructor thread").start()
             if args:
@@ -319,28 +317,25 @@ class StreamPickler(Pickler, BytesReader):
         try:
             return self.__buffer.read(size)
         finally:
-            with self.__dump_lock:
-                if self.__exception:
-                    exc, self.__exception = self.__exception, None
-                    raise exc
+            if self.__exception:
+                exc, self.__exception = self.__exception, None
+                raise exc
     
     def readinto(self, buffer: bytearray | memoryview) -> int:
         try:
             return self.__buffer.readinto(buffer)
         finally:
-            with self.__dump_lock:
-                if self.__exception:
-                    exc, self.__exception = self.__exception, None
-                    raise exc
+            if self.__exception:
+                exc, self.__exception = self.__exception, None
+                raise exc
     
     def readline(self, size: int | float = float("inf")) -> bytes | bytearray | memoryview:
         try:
             return self.__buffer.readline(size)
         finally:
-            with self.__dump_lock:
-                if self.__exception:
-                    exc, self.__exception = self.__exception, None
-                    raise exc
+            if self.__exception:
+                exc, self.__exception = self.__exception, None
+                raise exc
     
     def dump(self, obj: Any) -> None:
         """
@@ -355,10 +350,9 @@ class StreamPickler(Pickler, BytesReader):
             self.__object = obj
             self.__ready.set()
             self.__finished.wait()
-        with self.__dump_lock:
-            if self.__exception:
-                exc, self.__exception = self.__exception, None
-                raise exc
+        if self.__exception:
+            exc, self.__exception = self.__exception, None
+            raise exc
         
     
 

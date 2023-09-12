@@ -80,7 +80,7 @@ class Budget:
         """
         return self.__closed
     
-    def close(self, *, erase : bool = True):
+    def close(self, *, erase : bool = False):
         """
         Closes the budget:
         - Sets its value to zero if erase is True.

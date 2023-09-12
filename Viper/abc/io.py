@@ -534,6 +534,14 @@ class IOWriter(IOBase, Generic[Buf, MutBuf]):
                                         raise RuntimeError("Writing stream acquired with no space available and is not closed")
                                     return
 
+                            if not acquired_reader or not acquired_writer:
+                                if acquired_reader:
+                                    buffer.readable.release()
+                                    acquired_reader = False
+                                if acquired_writer:
+                                    self.writable.release()
+                                    acquired_writer = False
+                            
                         available_for_write = min(available_for_write, STREAM_PACKET_SIZE)
                         available_for_read = min(available_for_read, STREAM_PACKET_SIZE)
 
