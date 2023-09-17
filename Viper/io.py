@@ -91,8 +91,11 @@ class BytesIO(AbstractBytesIO):
                 pos = len(self.__buffer) + offset
             if pos < 0:
                 raise ValueError("Negative position in stream.")
-            self.__pos = pos
-            self.__readable.value = len(self.__buffer) - self.__pos
+            self.__pos, old_pos = pos, self.__pos
+            if pos > old_pos:
+                self.__readable -= pos - old_pos
+            elif pos < old_pos:
+                self.__readable += old_pos - pos
             return self.__pos
     
     def truncate(self, size: int | None = None):
@@ -106,11 +109,13 @@ class BytesIO(AbstractBytesIO):
             if self.closed:
                 raise self.__IOClosedError(f"{type(self).__name__} is closed")
             if len(self.__buffer) < size:
-                self.__buffer.extend(b"\0" * (size - len(self.__buffer)))
-                self.__readable.value = len(self.__buffer) - self.__pos
+                added = (size - len(self.__buffer))
+                self.__buffer.extend(b"\0" * added)
+                self.__readable += added
             elif len(self.__buffer) > size:
+                subtracted = len(self.__buffer) - size
                 self.__buffer = self.__buffer[:size]
-                self.__readable.value = len(self.__buffer) - self.__pos
+                self.__readable -= subtracted
 
     def write(self, data: bytes | bytearray | memoryview) -> int:
         if not isinstance(data, bytes | bytearray | memoryview):
@@ -120,9 +125,12 @@ class BytesIO(AbstractBytesIO):
                 raise self.__IOClosedError(f"{type(self).__name__} is closed")
             if self.__pos > len(self.__buffer):
                 self.__buffer.extend(b"\0" * (self.__pos - len(self.__buffer)))
+            old_len, old_pos = len(self.__buffer), self.__pos
             self.__buffer[self.__pos : self.__pos + len(data)] = data
             self.__pos += len(data)
-            self.__readable.value = len(self.__buffer) - self.__pos
+            added = len(self.__buffer) - old_len
+            moved = self.__pos - old_pos
+            self.__readable -= added - moved
             return len(data)
     
     def read(self, size: int | float = float("inf")) -> bytes:
@@ -137,7 +145,7 @@ class BytesIO(AbstractBytesIO):
                 raise self.__IOClosedError(f"{type(self).__name__} is closed")
             data = bytes(self.__buffer[self.__pos : min(len(self.__buffer), self.__pos + total_size)])
             self.__pos += len(data)
-            self.__readable.value = len(self.__buffer) - self.__pos
+            self.__readable -= len(data)
             return data
         
     def readinto(self, buffer: bytearray | memoryview) -> int:
@@ -166,7 +174,7 @@ class BytesIO(AbstractBytesIO):
             except ValueError:
                 data = bytes(memoryview(self.__buffer)[self.__pos : min(len(self.__buffer), self.__pos + total_size)])
             self.__pos += len(data)
-            self.__readable.value = len(self.__buffer) - self.__pos
+            self.__readable -= len(data)
             return data
         
 
@@ -308,8 +316,11 @@ class StringIO(AbstractStringIO):
                 raise ValueError("Negative position in stream.")
                 
             self.__bytes_pos = self.__str_pos_to_bytes_pos(final_str_pos)
-            self.__str_pos = final_str_pos
-            self.__readable.value = self.__str_len - self.__str_pos
+            self.__str_pos, old_str_pos = final_str_pos, self.__str_pos
+            if final_str_pos > old_str_pos:
+                self.__readable -= final_str_pos - old_str_pos
+            elif final_str_pos < old_str_pos:
+                self.__readable += old_str_pos - final_str_pos
             return self.__str_pos
     
     def truncate(self, size: int | None = None):
@@ -327,8 +338,11 @@ class StringIO(AbstractStringIO):
                 self.__buffer.extend(b"\0" * (bytes_pos - len(self.__buffer)))
             elif len(self.__buffer) > bytes_pos:
                 self.__buffer = self.__buffer[:bytes_pos]
-            self.__str_len = size
-            self.__readable.value = self.__str_len - self.__str_pos
+            self.__str_len, old_size = size, self.__str_len
+            if size > old_size:
+                self.__readable += size - old_size
+            elif size < old_size:
+                self.__readable -= old_size - size
 
     def write(self, data: str) -> int:
         if not isinstance(data, str):
@@ -351,10 +365,13 @@ class StringIO(AbstractStringIO):
             old_data = self.__buffer[bytes_start : bytes_end]
             self.__buffer[bytes_start : bytes_start + len(encoded_data)] = encoded_data
             self.__bytes_pos += len(encoded_data)
+            old_str_len, old_str_pos = self.__str_len, self.__str_pos
             self.__str_len -= len(old_data.decode())
             self.__str_len += len(data)
             self.__str_pos += len(data)
-            self.__readable.value = self.__str_len - self.__str_pos
+            added = self.__str_len - old_str_len
+            moved = self.__str_pos - old_str_pos
+            self.__readable -= added - moved
             return len(data)
     
     def read(self, size: int | float = float("inf")) -> str:
@@ -376,7 +393,7 @@ class StringIO(AbstractStringIO):
             data = self.__buffer[bytes_start : bytes_end].decode()
             self.__bytes_pos = bytes_end
             self.__str_pos += len(data)
-            self.__readable.value = self.__str_len - self.__str_pos
+            self.__readable -= len(data)
             return data
         
     def readinto(self, buffer: bytearray | memoryview, encoding : str = "utf-8") -> int:
@@ -406,7 +423,7 @@ class StringIO(AbstractStringIO):
                 buffer[i : i + len(encoded_char)] = encoded_char
                 i += len(encoded_char)
                 self.__str_pos += len(char)
-            self.__readable.value = self.__str_len - self.__str_pos
+            self.__readable -= i
         return i
     
     def readline(self, size: int | float = float("inf")) -> str:
@@ -431,7 +448,7 @@ class StringIO(AbstractStringIO):
             data = self.__buffer[bytes_start : bytes_end].decode()
             self.__bytes_pos = bytes_end
             self.__str_pos += len(data)
-            self.__readable.value = self.__str_len - self.__str_pos
+            self.__readable -= len(data)
             return data
         
 

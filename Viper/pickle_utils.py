@@ -82,13 +82,27 @@ class StreamUnpickler(Unpickler, BytesWriter):
         The writable property will block until it has received a value. Zero indicates the end.
         """
 
+        from .abc.utils import Budget as __Budget
+
         def __init__(self, size: int = BUFFER_SIZE) -> None:
             super().__init__(size)
-            self.writable.value = 0
+            self.__writable = self.__Budget()
+        
+        @property
+        def writable(self):
+            return self.__writable
+        
+        @writable.setter
+        def writable(self, value : __Budget):
+            self.__writable = value
+
+        def close(self):
+            super().close()
+            self.__writable.close(erase = True)
 
         def read(self, size: int) -> bytes:
             with self.read_lock:
-                self.writable.value += size
+                self.writable += size
                 result = super().read(size)
                 return result
             
@@ -113,14 +127,14 @@ class StreamUnpickler(Unpickler, BytesWriter):
 
         def readinto(self, buffer: bytearray | memoryview) -> int:
             with self.read_lock:
-                self.writable.value += len(buffer)
+                self.writable += len(buffer)
                 result = super().readinto(buffer)
                 return result
         
         def write(self, data: bytes | bytearray | memoryview) -> int:
             with self.write_lock:
                 result = super().write(data)
-                self.writable.value = max(0, self.writable.value - result)
+                self.writable -= result
                 return result
 
 

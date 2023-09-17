@@ -16,6 +16,8 @@ class Budget:
     This class represents a ressource that can be increased or decreased, but that must stay positive.
     To take from the budget, you can acquire it like a lock.
     Closing the Budget will make it impossible to increase again.
+
+    It's actually like an accessorized semaphore?
     """
 
     def __init__(self, init_value : int = 0) -> None:
@@ -92,7 +94,7 @@ class Budget:
             self.__closed = True
             self.__positive_event.set()
             if erase:
-                self.value = 0
+                self.__value = 0
     
     @property
     def value(self) -> int:
@@ -101,33 +103,33 @@ class Budget:
         """
         return self.__value
     
-    @value.setter
-    def value(self, val : int):
-        """
-        Sets the value of the budget. If it is greater than the current value, does not block. Otherwise, acquires the budget first.
-        """
-        if not isinstance(val, int):
-            raise TypeError(f"Expected int, got '{type(val).__name__}'")
-        if val < 0:
-            raise ValueError("Budget must have a non-negative value")
-        with self.__op_lock:
-            if self.__value > val:
-                with self:
-                    self.__value = val
-                    if self.__value == 0:
-                        if not self.closed:
-                            self.__positive_event.clear()
-                        for cb in self.__callbacks:
-                            try:
-                                cb(self)
-                            except:
-                                raise RuntimeError("Bugdet's callback got an exception when reaching zero")
-            elif self.__value < val:
-                if self.closed:
-                    raise RuntimeError("Budget is closed")
-                old_value, self.__value = self.__value, val
-                if old_value == 0 and not self.closed:
-                    self.__positive_event.set()
+    # @value.setter
+    # def value(self, val : int):
+    #     """
+    #     Sets the value of the budget. If it is greater than the current value, does not block. Otherwise, acquires the budget first.
+    #     """
+    #     if not isinstance(val, int):
+    #         raise TypeError(f"Expected int, got '{type(val).__name__}'")
+    #     if val < 0:
+    #         raise ValueError("Budget must have a non-negative value")
+    #     with self.__op_lock:
+    #         if self.__value > val:
+    #             with self:
+    #                 self.__value = val
+    #                 if self.__value == 0:
+    #                     if not self.closed:
+    #                         self.__positive_event.clear()
+    #                     for cb in self.__callbacks:
+    #                         try:
+    #                             cb(self)
+    #                         except:
+    #                             raise RuntimeError("Bugdet's callback got an exception when reaching zero")
+    #         elif self.__value < val:
+    #             if self.closed:
+    #                 raise RuntimeError("Budget is closed")
+    #             old_value, self.__value = self.__value, val
+    #             if old_value == 0 and not self.closed:
+    #                 self.__positive_event.set()
     
     @property
     def lock(self):
@@ -193,8 +195,10 @@ class Budget:
         """
         if not isinstance(value, int):
             raise TypeError(f"Expected int, got '{type(value).__name__}'")
-        if value <= 0:
-            raise ValueError(f"Expected a positive nonzero value, got {value}")
+        if value < 0:
+            raise ValueError(f"Expected a positive value, got {value}")
+        if value == 0:
+            return
         with self.__op_lock:
             if self.closed:
                 raise RuntimeError("Budget is closed")
@@ -208,8 +212,10 @@ class Budget:
         """
         if not isinstance(value, int):
             raise TypeError(f"Expected int, got '{type(value).__name__}'")
-        if value <= 0:
-            raise ValueError(f"Expected a positive nonzero value, got {value}")
+        if value < 0:
+            raise ValueError(f"Expected a positive value, got {value}")
+        if value == 0:
+            return
         with self:
             while value > 0:
                 with self.__op_lock:
