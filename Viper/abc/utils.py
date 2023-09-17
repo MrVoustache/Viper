@@ -224,6 +224,8 @@ class Budget:
                     if self.__value == 0:
                         if not self.closed:
                             self.__positive_event.clear()
+                        elif value:
+                            raise RuntimeError("Budget is closed")
                         for cb in self.__callbacks:
                             try:
                                 cb(self)
