@@ -83,6 +83,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
         """
 
         from .abc.utils import Budget as __Budget
+        from .abc.io import IOClosedError as __IOClosedError
 
         def __init__(self, size: int = BUFFER_SIZE) -> None:
             super().__init__(size)
@@ -91,10 +92,6 @@ class StreamUnpickler(Unpickler, BytesWriter):
         @property
         def writable(self):
             return self.__writable
-        
-        @writable.setter
-        def writable(self, value : __Budget):
-            self.__writable = value
 
         def close(self):
             super().close()
@@ -102,7 +99,7 @@ class StreamUnpickler(Unpickler, BytesWriter):
 
         def read(self, size: int) -> bytes:
             with self.read_lock:
-                self.writable += size
+                self.__writable += size
                 result = super().read(size)
                 return result
             
@@ -127,14 +124,18 @@ class StreamUnpickler(Unpickler, BytesWriter):
 
         def readinto(self, buffer: bytearray | memoryview) -> int:
             with self.read_lock:
-                self.writable += len(buffer)
+                self.__writable += len(buffer)
                 result = super().readinto(buffer)
                 return result
         
         def write(self, data: bytes | bytearray | memoryview) -> int:
             with self.write_lock:
                 result = super().write(data)
-                self.writable -= result
+                assert result == len(data), "Too much data was given to the Unpickler"
+                try:
+                    self.__writable -= result
+                except RuntimeError:
+                    raise self.__IOClosedError("Unpickler was closed and received too much data") from None
                 return result
 
 
@@ -211,7 +212,12 @@ class StreamUnpickler(Unpickler, BytesWriter):
         raise OSError(f"{type(self).__name__} is not truncable")
     
     def write(self, data: bytes | bytearray | memoryview) -> int:
-        return self.__buffer.write(data)
+        try:
+            return self.__buffer.write(data)
+        except self.__IOClosedError:
+            if not self.__ready.is_set():
+                raise
+            return len(data)
     
     def load(self) -> Any:
         """
