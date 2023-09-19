@@ -20,6 +20,8 @@ class Budget:
     It's actually like an accessorized semaphore?
     """
 
+    __IOClosedError = None
+
     def __init__(self, init_value : int = 0) -> None:
         if not isinstance(init_value, int):
             raise TypeError(f"Expected int, got '{type(init_value).__name__}'")
@@ -27,6 +29,9 @@ class Budget:
             raise ValueError("Budget must have a non-negative value")
         from threading import RLock, Event
         from typing import Callable
+        if Budget.__IOClosedError is None:
+            from .io import IOClosedError
+            Budget.__IOClosedError = IOClosedError
         self.__closed : bool = False
         self.__lock = RLock()
         self.__op_lock = RLock()
@@ -225,7 +230,7 @@ class Budget:
                         if not self.closed:
                             self.__positive_event.clear()
                         elif value:
-                            raise RuntimeError("Budget is closed")
+                            raise self.__IOClosedError("Budget is closed")
                         for cb in self.__callbacks:
                             try:
                                 cb(self)
