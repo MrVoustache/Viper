@@ -9,7 +9,6 @@ Careful : This module actually gets erased by the frozendict class:
 
 
 from typing import Any, Iterable, Mapping, TypeVar
-from Viper.building.module_tools import clean_annotations, replace_module
 
 __all__ = ["frozendict"]
 
@@ -84,10 +83,8 @@ class frozendict(dict[K, V]):
     def fromkeys(iterable : Iterable[K], value : V | None = None) -> "frozendict[K, V | None]":
         return frozendict(super().fromkeys(iterable, value))
 
-clean_annotations(frozendict)
 
 
 
 
-
-del clean_annotations, replace_module, Any, Iterable, Mapping, TypeVar, K, V
+del Any, Iterable, Mapping, TypeVar, K, V
