@@ -89,6 +89,6 @@ Hello!
 How are you doing?
 Good!
 ```
-- And my other useful random features!
+- And many other useful random features!
 
 Note that this library is extensively documented. Use Python's help system (for example the help function while in an interactive interpreter) to learn how to use all the modules and classes.
