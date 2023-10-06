@@ -124,7 +124,8 @@ class IsoSet(MutableSet[K]):
             if not isinstance(si, IsoSet.__Iterable):
                 raise TypeError(f"Expected iterable, got '{type(si).__name__}'")
         for si in sets:
-            s -= si
+            for k in si:
+                s.discard(k)
         return s
     
     def difference_update(self, *sets : AbstractSet[K]):
@@ -135,7 +136,8 @@ class IsoSet(MutableSet[K]):
             if not isinstance(si, IsoSet.__Iterable):
                 raise TypeError(f"Expected iterable, got '{type(si).__name__}'")
         for si in sets:
-            self -= si
+            for k in si:
+                self.discard(k)
     
     def discard(self, value: K) -> None:
         if not isinstance(value, IsoSet.__Hashable):
@@ -155,13 +157,10 @@ class IsoSet(MutableSet[K]):
 
         (i.e. all elements that are in this set but not the others.)
         """
-        s = self.copy()
         for si in sets:
             if not isinstance(si, IsoSet.__Iterable):
                 raise TypeError(f"Expected iterable, got '{type(si).__name__}'")
-        for si in sets:
-            s &= si
-        return s
+        return self.difference(self.difference(*sets))
     
     def intersection_update(self, *sets : AbstractSet[K]):
         """
@@ -170,8 +169,7 @@ class IsoSet(MutableSet[K]):
         for si in sets:
             if not isinstance(si, IsoSet.__Iterable):
                 raise TypeError(f"Expected iterable, got '{type(si).__name__}'")
-        for si in sets:
-            self &= si
+        self.difference_update(self.difference(*sets))
     
     def isdisjoint(self, s : AbstractSet[K]) -> bool:
         """
@@ -229,9 +227,12 @@ class IsoSet(MutableSet[K]):
         """
         if not isinstance(s, IsoSet.__Iterable):
             raise TypeError(f"Expected iterable, got '{type(s).__name__}'")
-        res = self ^ s
-        if not isinstance(res, IsoSet):
-            res = IsoSet(res)
+        res = self.copy()
+        for k in s:
+            if k in res:
+                res.remove(k)
+            else:
+                res.add(k)
         return res
     
     def symmetric_difference_update(self, s : AbstractSet[K]):
@@ -240,7 +241,11 @@ class IsoSet(MutableSet[K]):
         """
         if not isinstance(s, IsoSet.__Iterable):
             raise TypeError(f"Expected iterable, got '{type(s).__name__}'")
-        self ^= s
+        for k in s:
+            if k in self:
+                self.remove(k)
+            else:
+                self.add(k)
 
     def union(self, *sets : AbstractSet[K]) -> "IsoSet[K]":
         """
@@ -253,7 +258,8 @@ class IsoSet(MutableSet[K]):
             if not isinstance(si, IsoSet.__Iterable):
                 raise TypeError(f"Expected iterable, got '{type(si).__name__}'")
         for si in sets:
-            s |= si
+            for k in si:
+                s.add(k)
         return s
     
     def update(self, *sets : AbstractSet[K]):
@@ -264,7 +270,8 @@ class IsoSet(MutableSet[K]):
             if not isinstance(si, IsoSet.__Iterable):
                 raise TypeError(f"Expected iterable, got '{type(si).__name__}'")
         for si in sets:
-            self |= si
+            for k in si:
+                self.add(k)
     
     def __sizeof__(self) -> int:
         return super().__sizeof__() + IsoSet.__getsizeof(self.__table) + sum(IsoSet.__getsizeof(hdict) for hdict in self.__table.values())
@@ -598,7 +605,7 @@ class IsoView(IsoSet[K]):
         """
         if not isinstance(s, IsoView.__Iterable):
             raise TypeError(f"Expected iterable, got '{type(s).__name__}'")
-        self.__set ^= s
+        self.__set.symmetric_difference_update(s)
 
     def union(self, *sets : AbstractSet[K]) -> IsoSet[K]:
         """
