@@ -57,6 +57,17 @@ class IsoSet(MutableSet[K]):
     
     def __str__(self) -> str:
         return "{" + ', '.join(str(e) for e in self) + "}"
+    
+    def __getstate__(self):
+        return {"data" : list(self)}
+
+    def __setstate__(self, state):
+        self.__table : "dict[int, dict[int, K]]" = {}
+        for t in state["data"]:
+            if not isinstance(t, FrozenIsoSet.__Hashable):
+                raise TypeError(f"unhashable type: '{type(t).__name__}'")
+            self.__table.setdefault(hash(t), {})[id(t)] = t # type: ignore
+        self.__len = sum(len(hdict) for hdict in self.__table.values())
 
     def __contains__(self, x) -> bool:
         """
@@ -276,13 +287,7 @@ class IsoSet(MutableSet[K]):
     
     def __sizeof__(self) -> int:
         return super().__sizeof__() + IsoSet.__getsizeof(self.__table) + sum(IsoSet.__getsizeof(hdict) for hdict in self.__table.values())
-    
-    def __getstate__(self) -> object:
-        return {
-            "__table" : self.__table,
-            "__len" : self.__len,
-            }
-    
+        
     def __eq__(self, value: object) -> bool:
         if self is value:
             return True
@@ -456,6 +461,18 @@ class FrozenIsoSet(Set[K]):
             self.__table.setdefault(hash(t), {})[id(t)] = t
         self.__len = sum(len(hdict) for hdict in self.__table.values())
         self.__hash : int | None = None
+
+    def __getstate__(self):
+        return {"data" : list(self)}
+
+    def __setstate__(self, state):
+        self.__table : "dict[int, dict[int, K]]" = {}
+        for t in state["data"]:
+            if not isinstance(t, FrozenIsoSet.__Hashable):
+                raise TypeError(f"unhashable type: '{type(t).__name__}'")
+            self.__table.setdefault(hash(t), {})[id(t)] = t # type: ignore
+        self.__len = sum(len(hdict) for hdict in self.__table.values())
+        self.__hash = None
                 
     def __repr__(self) -> str:
         return f"{type(self).__name__}([{', '.join(repr(e) for e in self)}])"
@@ -602,12 +619,6 @@ class FrozenIsoSet(Set[K]):
     
     def __sizeof__(self) -> int:
         return super().__sizeof__() + FrozenIsoSet.__getsizeof(self.__table) + sum(FrozenIsoSet.__getsizeof(hdict) for hdict in self.__table.values())
-    
-    def __getstate__(self) -> object:
-        return {
-            "__table" : self.__table,
-            "__len" : self.__len,
-            }
     
     def __hash__(self) -> int:
         """
@@ -1841,6 +1852,9 @@ class IsoDict(MutableMapping[K, V]):
         for k, v in kwargs:
             self.__table.setdefault(hash(k), {})[id(k)] = (k, v) # type: ignore
         self.__len = sum(len(hdict) for hdict in self.__table.values())
+    
+    def __reduce__(self):
+        return IsoDict, (), None, None, iter(self.items())
 
     @overload
     @classmethod
@@ -1919,15 +1933,6 @@ class IsoDict(MutableMapping[K, V]):
             if not hvalues:
                 self.__table.pop(h)
         raise KeyError(k)
-    
-    def __getstate__(self):
-        """
-        Implements dumps(self).
-        """
-        return {
-            "__table" : self.__table,
-            "__len" : self.__len,
-            }
     
     def clear(self) -> None:
         self.__table.clear()
@@ -2055,6 +2060,9 @@ class FrozenIsoDict(IsoDict[K, V]):
     __slots__ = {
         "__hash" : "The hash of the FrozenIsoDict"
     }
+
+    def __reduce__(self):
+        return FrozenIsoDict, (IsoDict(self), )
 
     def __delitem__(self, v : V):
         raise TypeError("'FrozenIsoDict' object doesn't support item deletion")
