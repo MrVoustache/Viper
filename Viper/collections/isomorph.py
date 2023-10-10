@@ -64,8 +64,6 @@ class IsoSet(MutableSet[K]):
     def __setstate__(self, state):
         self.__table : "dict[int, dict[int, K]]" = {}
         for t in state["data"]:
-            if not isinstance(t, FrozenIsoSet.__Hashable):
-                raise TypeError(f"unhashable type: '{type(t).__name__}'")
             self.__table.setdefault(hash(t), {})[id(t)] = t # type: ignore
         self.__len = sum(len(hdict) for hdict in self.__table.values())
 
@@ -468,8 +466,6 @@ class FrozenIsoSet(Set[K]):
     def __setstate__(self, state):
         self.__table : "dict[int, dict[int, K]]" = {}
         for t in state["data"]:
-            if not isinstance(t, FrozenIsoSet.__Hashable):
-                raise TypeError(f"unhashable type: '{type(t).__name__}'")
             self.__table.setdefault(hash(t), {})[id(t)] = t # type: ignore
         self.__len = sum(len(hdict) for hdict in self.__table.values())
         self.__hash = None
