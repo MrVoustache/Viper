@@ -4,8 +4,8 @@ This module defines collections which are like sets and dict but they allow for 
 Note that to work, these collections assume that elements are not equal if their hashes are different and that equality is transitive.
 """
 
-from collections.abc import ItemsView, MutableSet, KeysView, MutableMapping, ValuesView, Set
-from typing import Any, Generic, Iterable, Iterator, Mapping, TypeVar, Hashable, overload
+from collections.abc import ItemsView, MutableSet, KeysView, Mapping, MutableMapping, ValuesView, Set, Hashable, Iterable
+from typing import Any, Generic, Iterator, TypeVar, overload
 
 __all__ = ["IsoSet", "FrozenIsoSet", "IsoDict", "FrozenIsoDict"]
 
@@ -31,7 +31,7 @@ class IsoSet(MutableSet[K]):
     To switch between set comparison rules, use IsoSet.iso_view and IsoView.iso_set.
     """
 
-    from typing import Set as __AbstractSet, Iterable as __Iterable, Hashable as __Hashable
+    from collections.abc import Set as __Set, Iterable as __Iterable, Hashable as __Hashable
     from sys import getsizeof
     __getsizeof = staticmethod(getsizeof)
     del getsizeof
@@ -286,14 +286,14 @@ class IsoSet(MutableSet[K]):
     def __eq__(self, value: object) -> bool:
         if self is value:
             return True
-        if not isinstance(value, IsoSet.__AbstractSet):
+        if not isinstance(value, IsoSet.__Set):
             return False
         return len(self) == len(value) and all(e in value for e in self)
     
     def __le__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             raise TypeError(f"'<=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoSet):
             return len(self) <= len(other) and all(k in other for k in self)
@@ -302,7 +302,7 @@ class IsoSet(MutableSet[K]):
     def __lt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             raise TypeError(f"'<' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoSet):
             return len(self) < len(other) and all(k in other for k in self)
@@ -311,7 +311,7 @@ class IsoSet(MutableSet[K]):
     def __ge__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             raise TypeError(f"'>=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoSet):
             return len(self) >= len(other) and all(k in self for k in other)
@@ -320,14 +320,14 @@ class IsoSet(MutableSet[K]):
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             raise TypeError(f"'>' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoSet):
             return len(self) >= len(other) and all(k in self for k in other)
         return self >= other and len(self) != len(other)
     
     def __and__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         if len(self) > len(other):
             return IsoSet(k for k in other if k in self)
@@ -335,7 +335,7 @@ class IsoSet(MutableSet[K]):
             return IsoSet(k for k in self if k in other)
     
     def __rand__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         if len(self) > len(other):
             return IsoSet(k for k in other if k in self)
@@ -343,7 +343,7 @@ class IsoSet(MutableSet[K]):
             return IsoSet(k for k in self if k in other)
         
     def __iand__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         for k in self.copy():
             if k not in other:
@@ -351,7 +351,7 @@ class IsoSet(MutableSet[K]):
         return self
     
     def __or__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         s = IsoSet(self)
         for k in other:
@@ -359,7 +359,7 @@ class IsoSet(MutableSet[K]):
         return s
     
     def __ror__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         s = IsoSet(self)
         for k in other:
@@ -367,31 +367,31 @@ class IsoSet(MutableSet[K]):
         return s
     
     def __ior__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         for k in other:
             self.add(k)
         return self
     
     def __sub__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         return IsoSet(k for k in self if k not in other)
     
     def __rsub__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         return IsoSet(k for k in other if k not in self)
     
     def __isub__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         for k in other:
             self.discard(k)
         return self
     
     def __xor__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         s = IsoSet()
         for k in self:
@@ -403,7 +403,7 @@ class IsoSet(MutableSet[K]):
         return s
     
     def __rxor__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         s = IsoSet()
         for k in self:
@@ -415,7 +415,7 @@ class IsoSet(MutableSet[K]):
         return s
     
     def __ixor__(self, other : Set[K]) -> "IsoSet[K]":
-        if not isinstance(other, IsoSet.__AbstractSet):
+        if not isinstance(other, IsoSet.__Set):
             return NotImplemented
         for k in other:
             if k in self:
@@ -434,7 +434,7 @@ class FrozenIsoSet(Set[K]):
     Frozen (immutable) version of IsoSets.
     """
 
-    from typing import Set as __AbstractSet, Iterable as __Iterable, Hashable as __Hashable
+    from collections.abc import Set as __Set, Iterable as __Iterable, Hashable as __Hashable
     from sys import getsizeof
     __getsizeof = staticmethod(getsizeof)
     del getsizeof
@@ -620,14 +620,14 @@ class FrozenIsoSet(Set[K]):
     def __eq__(self, value: object) -> bool:
         if self is value:
             return True
-        if not isinstance(value, FrozenIsoSet.__AbstractSet):
+        if not isinstance(value, FrozenIsoSet.__Set):
             return False
         return len(self) == len(value) and all(e in value for e in self)
     
     def __le__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             raise TypeError(f"'<=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, FrozenIsoSet):
             return len(self) <= len(other) and all(k in other for k in self)
@@ -636,7 +636,7 @@ class FrozenIsoSet(Set[K]):
     def __lt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             raise TypeError(f"'<' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, FrozenIsoSet):
             return len(self) < len(other) and all(k in other for k in self)
@@ -645,7 +645,7 @@ class FrozenIsoSet(Set[K]):
     def __ge__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             raise TypeError(f"'>=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, FrozenIsoSet):
             return len(self) >= len(other) and all(k in self for k in other)
@@ -654,14 +654,14 @@ class FrozenIsoSet(Set[K]):
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             raise TypeError(f"'>' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, FrozenIsoSet):
             return len(self) >= len(other) and all(k in self for k in other)
         return self >= other and len(self) != len(other)
     
     def __and__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         if len(self) > len(other):
             return FrozenIsoSet(k for k in other if k in self)
@@ -669,7 +669,7 @@ class FrozenIsoSet(Set[K]):
             return FrozenIsoSet(k for k in self if k in other)
     
     def __rand__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         if len(self) > len(other):
             return FrozenIsoSet(k for k in other if k in self)
@@ -677,7 +677,7 @@ class FrozenIsoSet(Set[K]):
             return FrozenIsoSet(k for k in self if k in other)
             
     def __or__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         s = FrozenIsoSet(self)
         for k in other:
@@ -685,7 +685,7 @@ class FrozenIsoSet(Set[K]):
         return s
     
     def __ror__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         s = FrozenIsoSet(self)
         for k in other:
@@ -693,17 +693,17 @@ class FrozenIsoSet(Set[K]):
         return s
         
     def __sub__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         return FrozenIsoSet(k for k in self if k not in other)
     
     def __rsub__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         return FrozenIsoSet(k for k in other if k not in self)
     
     def __xor__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         s = FrozenIsoSet()
         for k in self:
@@ -715,7 +715,7 @@ class FrozenIsoSet(Set[K]):
         return s
     
     def __rxor__(self, other : Set[K]) -> "FrozenIsoSet[K]":
-        if not isinstance(other, FrozenIsoSet.__AbstractSet):
+        if not isinstance(other, FrozenIsoSet.__Set):
             return NotImplemented
         s = FrozenIsoSet()
         for k in self:
@@ -738,7 +738,7 @@ class IsoView(MutableSet[K]):
     These special operations only work between IsoViews, falling back to IsoSet operations if one operand is not an IsoView.
     """
 
-    from typing import Set as __AbstractSet, Iterable as __Iterable, Hashable as __Hashable
+    from collections.abc import Set as __Set, Iterable as __Iterable, Hashable as __Hashable
 
     __slots__ = {
         "__table" : "The association table used to store all the elements of the IsoSet.",
@@ -942,7 +942,7 @@ class IsoView(MutableSet[K]):
     def __eq__(self, value: object) -> bool:
         if self is value:
             return True
-        if not isinstance(value, IsoView.__AbstractSet):
+        if not isinstance(value, IsoView.__Set):
             return False
         if not isinstance(value, IsoView):
             return self.__set == value
@@ -966,7 +966,7 @@ class IsoView(MutableSet[K]):
     def __le__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             raise TypeError(f"'<=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoView):
             return self.__set <= other
@@ -990,7 +990,7 @@ class IsoView(MutableSet[K]):
     def __lt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             raise TypeError(f"'<' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoView):
             return self.__set < other
@@ -1014,7 +1014,7 @@ class IsoView(MutableSet[K]):
     def __ge__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             raise TypeError(f"'>=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoView):
             return self.__set >= other
@@ -1038,7 +1038,7 @@ class IsoView(MutableSet[K]):
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             raise TypeError(f"'>' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoView):
             return self.__set > other
@@ -1060,12 +1060,12 @@ class IsoView(MutableSet[K]):
         return True
     
     def __and__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         return IsoView(self.__set & other)
     
     def __rand__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         r = other & self.__set
         if not isinstance(r, IsoSet):
@@ -1073,18 +1073,18 @@ class IsoView(MutableSet[K]):
         return IsoView(r)
         
     def __iand__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         self.__set &= other
         return self
     
     def __or__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         return IsoView(self.__set | other)
     
     def __ror__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         r = other | self.__set
         if not isinstance(r, IsoSet):
@@ -1092,18 +1092,18 @@ class IsoView(MutableSet[K]):
         return IsoView(r)
     
     def __ior__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         self.__set |= other
         return self
     
     def __sub__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         return IsoView(self.__set - other)
     
     def __rsub__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         r = other - self.__set
         if not isinstance(r, IsoSet):
@@ -1111,18 +1111,18 @@ class IsoView(MutableSet[K]):
         return IsoView(r)
     
     def __isub__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         self.__set -= other
         return self
     
     def __xor__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         return IsoView(self.__set ^ other)
     
     def __rxor__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         r = other ^ self.__set
         if not isinstance(r, IsoSet):
@@ -1130,7 +1130,7 @@ class IsoView(MutableSet[K]):
         return IsoView(r)
     
     def __ixor__(self, other : Set[K]) -> "IsoView[K]":
-        if not isinstance(other, IsoView.__AbstractSet):
+        if not isinstance(other, IsoView.__Set):
             return NotImplemented
         self.__set ^= other
         return self
@@ -1147,7 +1147,7 @@ class FrozenIsoView(Set[K]):
     These special operations only work between IsoViews, falling back to IsoSet operations if one operand is not an IsoView.
     """
 
-    from typing import Set as __AbstractSet, Iterable as __Iterable, Hashable as __Hashable
+    from collections.abc import Set as __Set, Iterable as __Iterable, Hashable as __Hashable
 
     __slots__ = {
         "__table" : "The association table used to store all the elements of the FrozenIsoSet.",
@@ -1299,7 +1299,7 @@ class FrozenIsoView(Set[K]):
     def __eq__(self, value: object) -> bool:
         if self is value:
             return True
-        if not isinstance(value, FrozenIsoView.__AbstractSet):
+        if not isinstance(value, FrozenIsoView.__Set):
             return False
         if isinstance(value, IsoView):
             value = self.__from_view(value)
@@ -1325,7 +1325,7 @@ class FrozenIsoView(Set[K]):
     def __le__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             raise TypeError(f"'<=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if isinstance(other, IsoView):
             other = self.__from_view(other)
@@ -1351,7 +1351,7 @@ class FrozenIsoView(Set[K]):
     def __lt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             raise TypeError(f"'<' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if isinstance(other, IsoView):
             other = self.__from_view(other)
@@ -1377,7 +1377,7 @@ class FrozenIsoView(Set[K]):
     def __ge__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             raise TypeError(f"'>=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if isinstance(other, IsoView):
             other = self.__from_view(other)
@@ -1403,7 +1403,7 @@ class FrozenIsoView(Set[K]):
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             raise TypeError(f"'>' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if isinstance(other, IsoView):
             other = self.__from_view(other)
@@ -1427,12 +1427,12 @@ class FrozenIsoView(Set[K]):
         return True
     
     def __and__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         return FrozenIsoView(self.__set & other)
     
     def __rand__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         r = other & self.__set
         if not isinstance(r, FrozenIsoSet):
@@ -1440,12 +1440,12 @@ class FrozenIsoView(Set[K]):
         return FrozenIsoView(r)
             
     def __or__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         return FrozenIsoView(self.__set | other)
     
     def __ror__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         r = other | self.__set
         if not isinstance(r, FrozenIsoSet):
@@ -1453,12 +1453,12 @@ class FrozenIsoView(Set[K]):
         return FrozenIsoView(r)
     
     def __sub__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         return FrozenIsoView(self.__set - other)
     
     def __rsub__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         r = other - self.__set
         if not isinstance(r, FrozenIsoSet):
@@ -1466,12 +1466,12 @@ class FrozenIsoView(Set[K]):
         return FrozenIsoView(r)
     
     def __xor__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         return FrozenIsoView(self.__set ^ other)
     
     def __rxor__(self, other : Set[K]) -> "FrozenIsoView[K]":
-        if not isinstance(other, FrozenIsoView.__AbstractSet):
+        if not isinstance(other, FrozenIsoView.__Set):
             return NotImplemented
         r = other ^ self.__set
         if not isinstance(r, FrozenIsoSet):
@@ -1503,7 +1503,7 @@ class IsoDictKeys(KeysView[K], Generic[K, V]):
     Note that these comparisons fall back to regular comparisons when one of the operands is not an IsoDictKeys.
     """
 
-    from typing import Set as __AbstractSet, Hashable as __Hashable
+    from collections.abc import Set as __Set, Hashable as __Hashable
 
     __slots__ = {
         "__mapping" : "The mapping that this view refers to.",
@@ -1538,7 +1538,7 @@ class IsoDictKeys(KeysView[K], Generic[K, V]):
     def __eq__(self, value: object) -> bool:
         if self is value:
             return True
-        if not isinstance(value, IsoDictKeys.__AbstractSet):
+        if not isinstance(value, IsoDictKeys.__Set):
             return False
         if not isinstance(value, IsoDictKeys):
             return NotImplemented
@@ -1562,7 +1562,7 @@ class IsoDictKeys(KeysView[K], Generic[K, V]):
     def __le__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, IsoDictKeys.__AbstractSet):
+        if not isinstance(other, IsoDictKeys.__Set):
             raise TypeError(f"'<=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoDictKeys):
             return NotImplemented
@@ -1586,7 +1586,7 @@ class IsoDictKeys(KeysView[K], Generic[K, V]):
     def __lt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, IsoDictKeys.__AbstractSet):
+        if not isinstance(other, IsoDictKeys.__Set):
             raise TypeError(f"'<' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoDictKeys):
             return NotImplemented
@@ -1610,7 +1610,7 @@ class IsoDictKeys(KeysView[K], Generic[K, V]):
     def __ge__(self, other: Set[Any]) -> bool:
         if self is other:
             return True
-        if not isinstance(other, IsoDictKeys.__AbstractSet):
+        if not isinstance(other, IsoDictKeys.__Set):
             raise TypeError(f"'>=' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoDictKeys):
             return NotImplemented
@@ -1634,7 +1634,7 @@ class IsoDictKeys(KeysView[K], Generic[K, V]):
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
             return False
-        if not isinstance(other, IsoDictKeys.__AbstractSet):
+        if not isinstance(other, IsoDictKeys.__Set):
             raise TypeError(f"'>' not supported between instances of '{type(self).__name__}' and '{type(other).__name__}'")
         if not isinstance(other, IsoDictKeys):
             return NotImplemented
@@ -1701,7 +1701,7 @@ class IsoDictValues(ValuesView[V], Generic[K, V]):
     This is the equivalent class of dict_values that list values of IsoDicts.
     """
 
-    from typing import ValuesView as __ValuesView
+    from collections.abc import ValuesView as __ValuesView
 
     __slots__ = {
         "__mapping" : "The mapping that this view refers to.",
@@ -1746,7 +1746,7 @@ class IsoDictItems(ItemsView[K, V]):
     This is the equivalent class of dict_items that list items of IsoDicts.
     """
 
-    from typing import Set as __AbstractSet, Hashable as __Hashable
+    from collections.abc import Set as __Set, Hashable as __Hashable
 
     __slots__ = {
         "__mapping" : "The mapping that this view refers to.",
@@ -1787,7 +1787,7 @@ class IsoDictItems(ItemsView[K, V]):
         return k in self.__mapping and self.__mapping[k] == v
     
     def __eq__(self, value: object) -> bool:
-        if not isinstance(value, IsoDictItems.__AbstractSet):
+        if not isinstance(value, IsoDictItems.__Set):
             return False
         return len(self) == len(value) and all(k in value for k in self)
     
@@ -1842,7 +1842,7 @@ class IsoDict(MutableMapping[K, V]):
     Use IsoDict.keys() to manipulate keys based on equality.
     """
 
-    from typing import Iterable as __Iterable, Hashable as __Hashable, Mapping as __Mapping
+    from collections.abc import Iterable as __Iterable, Hashable as __Hashable, Mapping as __Mapping
     from sys import getsizeof
     __getsizeof = staticmethod(getsizeof)
     del getsizeof
@@ -2155,6 +2155,7 @@ class FrozenIsoDict(IsoDict[K, V]):
     @staticmethod
     def fromkeys(iterable : Iterable[K], value : V | None = None) -> "FrozenIsoDict[K, V | None]":
         return FrozenIsoDict(super().fromkeys(iterable, value))
+
 
 
 
