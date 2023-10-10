@@ -1020,20 +1020,7 @@ class IsoView(MutableSet[K]):
             return self.__set >= other
         if len(self.__set) < len(other.__set):
             return False
-        for h, self_hdict in self.__table.items():
-            other_hdict : "dict[int, K]" = other.__table.get(h, {})
-            other_hdict, self_hdict = {i : k for i, k in other_hdict.items() if i not in self_hdict}, {i : k for i, k in self_hdict.items() if i not in other_hdict}    # Skipping identical elements
-            if len(self_hdict) < len(other_hdict):
-                return False
-            while other_hdict:
-                ia, a = other_hdict.popitem()
-                for ib, b in self_hdict.items():
-                    if a == b:
-                        self_hdict.pop(ib)
-                        break
-                else:
-                    return False
-        return True
+        return other <= self
     
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
@@ -1044,20 +1031,7 @@ class IsoView(MutableSet[K]):
             return self.__set > other
         if len(self.__set) <= len(other.__set):
             return False
-        for h, self_hdict in self.__table.items():
-            other_hdict : "dict[int, K]" = other.__table.get(h, {})
-            other_hdict, self_hdict = {i : k for i, k in other_hdict.items() if i not in self_hdict}, {i : k for i, k in self_hdict.items() if i not in other_hdict}    # Skipping identical elements
-            if len(self_hdict) < len(other_hdict):
-                return False
-            while other_hdict:
-                ia, a = other_hdict.popitem()
-                for ib, b in self_hdict.items():
-                    if a == b:
-                        self_hdict.pop(ib)
-                        break
-                else:
-                    return False
-        return True
+        return other < self
     
     def __and__(self, other : Set[K]) -> "IsoView[K]":
         if not isinstance(other, IsoView.__Set):
@@ -1385,20 +1359,7 @@ class FrozenIsoView(Set[K]):
             return self.__set >= other
         if len(self.__set) < len(other.__set):
             return False
-        for h, self_hdict in self.__table.items():
-            other_hdict : "dict[int, K]" = other.__table.get(h, {})
-            other_hdict, self_hdict = {i : k for i, k in other_hdict.items() if i not in self_hdict}, {i : k for i, k in self_hdict.items() if i not in other_hdict}    # Skipping identical elements
-            if len(self_hdict) < len(other_hdict):
-                return False
-            while other_hdict:
-                ia, a = other_hdict.popitem()
-                for ib, b in self_hdict.items():
-                    if a == b:
-                        self_hdict.pop(ib)
-                        break
-                else:
-                    return False
-        return True
+        return other <= self
     
     def __gt__(self, other: Set[Any]) -> bool:
         if self is other:
@@ -1411,20 +1372,7 @@ class FrozenIsoView(Set[K]):
             return self.__set > other
         if len(self.__set) <= len(other.__set):
             return False
-        for h, self_hdict in self.__table.items():
-            other_hdict : "dict[int, K]" = other.__table.get(h, {})
-            other_hdict, self_hdict = {i : k for i, k in other_hdict.items() if i not in self_hdict}, {i : k for i, k in self_hdict.items() if i not in other_hdict}    # Skipping identical elements
-            if len(self_hdict) < len(other_hdict):
-                return False
-            while other_hdict:
-                ia, a = other_hdict.popitem()
-                for ib, b in self_hdict.items():
-                    if a == b:
-                        self_hdict.pop(ib)
-                        break
-                else:
-                    return False
-        return True
+        return other < self
     
     def __and__(self, other : Set[K]) -> "FrozenIsoView[K]":
         if not isinstance(other, FrozenIsoView.__Set):
