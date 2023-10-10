@@ -216,6 +216,7 @@ class IsoSet(MutableSet[K]):
         i, e = hdict.popitem()
         if hdict:
             self.__table[h] = hdict
+        self.__len -= 1
         return e
         
     def remove(self, e : K):
@@ -1952,6 +1953,7 @@ class IsoDict(MutableMapping[K, V]):
             r = hvalues.pop(id(k))
             if not hvalues:
                 self.__table.pop(h)
+            self.__len -= 1
             return r[1]
         raise KeyError(k)
     
@@ -1966,12 +1968,16 @@ class IsoDict(MutableMapping[K, V]):
         i, e = hdict.popitem()
         if hdict:
             self.__table[h] = hdict
+        self.__len -= 1
         return e
     
     def setdefault(self, k : K, default: V = None) -> V:
         if not isinstance(k, IsoDict.__Hashable):
             raise TypeError(f"unhashable type: '{type(k).__name__}'")
+        if k in self:
+            return self[k]
         h = hash(k)
+        self.__len += 1
         return self.__table.setdefault(h, {}).setdefault(id(k), (k, default))[1]
     
     def get(self, k : K, default : V = None) -> V:
