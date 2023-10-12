@@ -1138,7 +1138,7 @@ class FrozenIsoView(Set[K]):
 
     def __init__(self, isoset : FrozenIsoSet[K]) -> None:
         self.__set = isoset
-        self.__table : "dict[int, dict[int, K]]" = isoset._IsoSet__table # type: ignore
+        self.__table : "dict[int, dict[int, K]]" = isoset._FrozenIsoSet__table # type: ignore
 
     @property
     def set(self) -> FrozenIsoSet[K]:
