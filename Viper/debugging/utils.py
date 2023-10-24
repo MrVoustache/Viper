@@ -26,10 +26,25 @@ class TimedPrint:
         from time import time_ns
         self.__timer = time_ns
         self.__t = time_ns()
+        self.__enabled : bool = True
         self.set(delay)
+
+    @property
+    def enabled(self) -> bool:
+        """
+        This TimedPrint instance will only print if this value is True.
+        """
+        return self.__enabled
+    
+    @enabled.setter
+    def enabled(self, value : bool):
+        if not isinstance(value, bool):
+            raise TypeError(f"Expected bool, got '{type(value).__name__}'")
+        self.__enabled = value
     
     def __call__(self, *args: Any, **kwargs : Any) -> None:
-        if (self.__timer() - self.__t) > self.__delay:
+        if self.enabled and (self.__timer() - self.__t) > self.__delay:
+            print(*args, **kwargs)
             self.__t = self.__timer()
     
     def reset(self):
