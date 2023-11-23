@@ -18,6 +18,11 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[tool.hatch.build]
+exclude = [
+  "test"
+]
+
 [project.urls]
 "Repository" = "https://github.com/MrVoustache/Viper"
 "Bug Tracker" = "https://github.com/MrVoustache/Viper/issues"
