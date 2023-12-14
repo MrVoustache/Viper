@@ -20,7 +20,7 @@ classifiers = [
 
 [tool.hatch.build]
 exclude = [
-  "test"
+  "/Viper/test"
 ]
 
 [project.urls]
