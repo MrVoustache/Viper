@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "viper_lib"
-version = "1.4.1"
+version = "1.4.2"
 authors = [
   { name="Vincent Raulin", email="vincent.raulin.n7@gmail.com" },
 ]
@@ -23,12 +23,12 @@ exclude = [
   "/Viper/test"
 ]
 include = [
-  "/Viper/**
+  "/Viper",
+  "/LICENSE",
+  "/README.md",
+  "Viper.pth"
 ]
 
 [project.urls]
 "Repository" = "https://github.com/MrVoustache/Viper"
 "Bug Tracker" = "https://github.com/MrVoustache/Viper/issues"
-
-[tool.hatch.build.targets.wheel.force-include]
-"./Viper.pth" = "./Viper.pth"
