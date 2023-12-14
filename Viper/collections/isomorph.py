@@ -2163,17 +2163,21 @@ class IsoDict(MutableMapping[K1, V1]):
         if not isinstance(k, IsoDict.__Hashable):
             raise TypeError(f"unhashable type: '{type(k).__name__}'")
         h = hash(k)
-        self.__table.setdefault(h, {})[id(k)] = (k, v)
+        hmap = self.__table.setdefault(h, {})
+        i = id(k)
+        if i not in hmap:
+            self.__len += 1
+        hmap[i] = (k, v)
 
     def __delitem__(self, k: K1) -> None:
         if not isinstance(k, IsoDict.__Hashable):
             raise TypeError(f"unhashable type: '{type(k).__name__}'")
         h = hash(k)
-        if h in self.__table and id(k) in self.__table[h]:
-            hvalues = self.__table[h]
-            hvalues.pop(id(k))
-            if not hvalues:
+        if h in self.__table and (i := id(k)) in (hmap := self.__table[h]):
+            hmap.pop(i)
+            if not hmap:
                 self.__table.pop(h)
+                self.__len -= 1
         raise KeyError(k)
     
     def clear(self) -> None:
@@ -2193,13 +2197,11 @@ class IsoDict(MutableMapping[K1, V1]):
         if not isinstance(k, IsoDict.__Hashable):
             raise TypeError(f"unhashable type: '{type(k).__name__}'")
         h = hash(k)
-        if h in self.__table and id(k) in self.__table[h]:
-            hvalues = self.__table[h]
-            r = hvalues.pop(id(k))
-            if not hvalues:
+        if h in self.__table and (i := id(k)) in (hmap := self.__table[h]):
+            hmap.pop(i)
+            if not hmap:
                 self.__table.pop(h)
-            self.__len -= 1
-            return r[1]
+                self.__len -= 1
         raise KeyError(k)
     
     def popitem(self) -> tuple[K1, V1]:
@@ -2209,10 +2211,10 @@ class IsoDict(MutableMapping[K1, V1]):
         """
         if not self:
             raise KeyError("'popitem(): IsoDict is empty'")
-        h, hdict = self.__table.popitem()
-        i, e = hdict.popitem()
-        if hdict:
-            self.__table[h] = hdict
+        h, hmap = self.__table.popitem()
+        i, e = hmap.popitem()
+        if hmap:
+            self.__table[h] = hmap
         self.__len -= 1
         return e
     
