@@ -22,6 +22,9 @@ classifiers = [
 exclude = [
   "/Viper/test"
 ]
+include = [
+  "/Viper/**
+]
 
 [project.urls]
 "Repository" = "https://github.com/MrVoustache/Viper"
