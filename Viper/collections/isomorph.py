@@ -2369,7 +2369,7 @@ class FrozenIsoDict(IsoDict[K1, V1]):
     
     @staticmethod
     def fromkeys(iterable : Iterable[K1], value : V1 | None = None) -> "FrozenIsoDict[K1, V1 | None]":
-        return FrozenIsoDict(super().fromkeys(iterable, value))
+        return FrozenIsoDict((k, value) for k in iterable)
 
 
 
