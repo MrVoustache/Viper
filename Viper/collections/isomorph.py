@@ -2175,9 +2175,9 @@ class IsoDict(MutableMapping[K1, V1]):
         h = hash(k)
         if h in self.__table and (i := id(k)) in (hmap := self.__table[h]):
             hmap.pop(i)
+            self.__len -= 1
             if not hmap:
                 self.__table.pop(h)
-                self.__len -= 1
         raise KeyError(k)
     
     def clear(self) -> None:
@@ -2198,10 +2198,11 @@ class IsoDict(MutableMapping[K1, V1]):
             raise TypeError(f"unhashable type: '{type(k).__name__}'")
         h = hash(k)
         if h in self.__table and (i := id(k)) in (hmap := self.__table[h]):
-            hmap.pop(i)
+            v = hmap.pop(i)[1]
+            self.__len -= 1
             if not hmap:
                 self.__table.pop(h)
-                self.__len -= 1
+            return v
         raise KeyError(k)
     
     def popitem(self) -> tuple[K1, V1]:
