@@ -31,7 +31,7 @@ class frozendict(dict[K, V]):
         "__hash" : "The hash of the frozendict"
     }
 
-    def __delitem__(self, v : V):
+    def __delitem__(self, k : K):
         raise TypeError("'frozendict' object doesn't support item deletion")
 
     def __ior__(self, __value : Mapping[K, V]):
@@ -82,6 +82,9 @@ class frozendict(dict[K, V]):
     @staticmethod
     def fromkeys(iterable : Iterable[K], value : V | None = None) -> "frozendict[K, V | None]":
         return frozendict(super().fromkeys(iterable, value))
+    
+    def __reduce__(self) -> str | tuple[Any, ...]:
+        return frozendict, (dict(self), )
 
 
 
