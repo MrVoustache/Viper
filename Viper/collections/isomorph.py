@@ -1905,6 +1905,9 @@ class IsoDictValues(ValuesView[V1], Generic[K1, V1]):
     def __reversed__(self) -> Iterator[V1]:
         return (v for hvalues in reversed(self.__table.values()) for k, v in reversed(hvalues.values()))
     
+    def __contains__(self, value : V1) -> bool:
+        return value in iter(self)
+    
     def __len__(self) -> int:
         return len(self.__mapping)
     
