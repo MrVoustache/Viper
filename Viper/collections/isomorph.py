@@ -2345,13 +2345,13 @@ class FrozenIsoDict(IsoDict[K1, V1]):
         raise AttributeError(f"'{type(self).__name__}' object has no attribute 'update'")
     
     def items(self) -> FrozenIsoDictItems[K1, V1]:
-        return FrozenIsoDictItems(self, self.__table)
+        return FrozenIsoDictItems(self, self._IsoDict__table)       # type: ignore
 
     def keys(self) -> FrozenIsoDictKeys[K1, V1]:
-        return FrozenIsoDictKeys(self, self.__table)
+        return FrozenIsoDictKeys(self, self._IsoDict__table)        # type: ignore
 
     def values(self) -> FrozenIsoDictValues[K1, V1]:
-        return FrozenIsoDictValues(self, self.__table)
+        return FrozenIsoDictValues(self, self._IsoDict__table)      # type: ignore
     
     def __hash__(self) -> int:
         """
